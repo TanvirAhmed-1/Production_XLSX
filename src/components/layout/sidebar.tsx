@@ -50,11 +50,18 @@ export function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, alertCount
       badge: null,
     },
     {
+      id: "signoff-summary",
+      label: "Sign-off Plan Summary",
+      icon: ShieldCheck,
+      badge: "Excel Summary",
+      badgeVariant: "emerald"
+    },
+    {
       id: "excel-master",
       label: "Excel Plan Master Grid",
       icon: FileSpreadsheet,
-      badge: "Excel Matrix",
-      badgeVariant: "emerald"
+      badge: "31-Day Matrix",
+      badgeVariant: "sky"
     },
   ];
 
@@ -63,6 +70,7 @@ export function Sidebar({ activeTab, setActiveTab, isOpen, setIsOpen, alertCount
       section: "production",
       label: "Production",
       items: [
+        { id: "signoff-summary", label: "Sign-off Plan Summary", icon: ShieldCheck },
         { id: "excel-master", label: "Excel Plan Matrix", icon: FileSpreadsheet },
         { id: "daily-report", label: "Daily Production", icon: Calendar },
         { id: "target-vs-actual", label: "Target vs Actual", icon: BarChart3 },

@@ -16,6 +16,116 @@ export interface ExcelImportResult {
   verification?: any;
 }
 
+// ===== COLUMN INDEX CONSTANTS (verified from deep audit) =====
+const C = {
+  LINE: 0,
+  MANPOWER: 1,
+  UNIT: 2,
+  ORDER_STATUS: 3,
+  BUYER: 4,
+  ORDER_CODE: 5,
+  OCS: 6,
+  SUB_OC: 7,
+  STYLE_REF: 8,
+  ENGAGE: 9,
+  ORDER_DEPT: 10,
+  LEAD_MM: 11,
+  MERCHANT: 12,
+  ARTICLE: 13,
+  SEASON: 14,
+  PO_NO: 15,
+  COLOR: 16,
+  ODR_QTY: 17,
+  SMV: 18,
+  MAIN_CAT: 19,
+  SUB_CAT: 20,
+  TYPE: 21,
+  OTT: 22,
+  REV_OTT: 23,
+  PCD: 24,
+  PSD: 25,
+  PFD: 26,
+  EX_FAC: 27,
+  REV_DEL: 28,
+  O_CREATED: 29,
+  FOB: 30,
+  SALES_VAL: 31,
+  WORK_DAYS: 32,
+  PLAN_DAY_LABEL: 33,
+  PLAN_QTY: 34,
+  DATE_START: 35,
+  DATE_END: 65,
+};
+
+// ===== HELPER FUNCTIONS =====
+
+function normalizeUnitCode(rawUnit: string, lineName: string): string {
+  const unit = (rawUnit || '').trim();
+  const line = (lineName || '').trim();
+
+  if (unit === 'B1U2' || unit === 'U02') return 'U02';
+  if (unit === 'B1U3' || unit === 'U03') return 'U03';
+  if (unit === 'B1U4' || unit === 'U04') return 'U04';
+  if (unit === 'B2' || unit.startsWith('B2')) return 'B2';
+
+  if (line.startsWith('U02')) return 'U02';
+  if (line.startsWith('U03')) return 'U03';
+  if (line.startsWith('U04')) return 'U04';
+  if (line.startsWith('B2')) return 'B2';
+
+  return 'U02';
+}
+
+function safeStr(val: any): string | null {
+  if (val === null || val === undefined) return null;
+  const s = String(val).trim();
+  return s.length > 0 ? s : null;
+}
+
+function safeInt(val: any, fallback = 0): number {
+  if (val === null || val === undefined || val === '') return fallback;
+  const n = Number(val);
+  return isNaN(n) ? fallback : Math.round(n);
+}
+
+function safeFloat(val: any, fallback = 0): number {
+  if (val === null || val === undefined || val === '') return fallback;
+  const n = Number(val);
+  return isNaN(n) ? fallback : Number(n.toFixed(4));
+}
+
+function parseExcelDate(val: any): Date | null {
+  if (val === null || val === undefined) return null;
+  if (typeof val === 'number' && val > 30000 && val < 60000) {
+    const d = XLSX.SSF.parse_date_code(val);
+    return new Date(Date.UTC(d.y, d.m - 1, d.d));
+  }
+  if (val instanceof Date) return val;
+  const parsed = new Date(val);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function isOrderItemRow(row: any[]): boolean {
+  const buyer = safeStr(row[C.BUYER]);
+  const orderCode = safeStr(row[C.ORDER_CODE]);
+  const styleRef = safeStr(row[C.STYLE_REF]);
+  return !!(buyer && orderCode && styleRef);
+}
+
+function isSubtotalRow(row: any[]): boolean {
+  const label = safeStr(row[C.PLAN_DAY_LABEL]);
+  return label === 'Plan/Day' || label === 'SAH' || label === 'Machine HR' || label === 'Effi. plan/D';
+}
+
+function getSubtotalType(row: any[]): string | null {
+  const label = safeStr(row[C.PLAN_DAY_LABEL]);
+  if (label === 'Plan/Day') return 'PLAN';
+  if (label === 'SAH') return 'SAH';
+  if (label === 'Machine HR') return 'CLOCK_HOURS';
+  if (label === 'Effi. plan/D') return 'EFFICIENCY';
+  return null;
+}
+
 export async function parseAndImportExcel(buffer: Buffer, fileName: string): Promise<ExcelImportResult> {
   const errors: string[] = [];
   try {
@@ -26,42 +136,71 @@ export async function parseAndImportExcel(buffer: Buffer, fileName: string): Pro
       throw new Error(`Sheet "${sheetName}" not found in uploaded file.`);
     }
 
-    const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-    if (rows.length < 2) {
+    const allRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+    if (allRows.length < 2) {
       throw new Error('Excel file has no data rows.');
     }
 
-    const headerRow = rows[0];
+    const headerRow = allRows[0];
+    const dataRows = allRows.slice(1);
 
-    // Identify Date Columns
-    const dateColumns: { colIndex: number; serial: number; dateStr: string; date: Date }[] = [];
-    for (let c = 35; c < headerRow.length; c++) {
+    // ===== 1. PARSE DATE COLUMNS =====
+    const dateColumns: { colIndex: number; dateStr: string; date: Date }[] = [];
+    for (let c = C.DATE_START; c <= Math.min(C.DATE_END, headerRow.length - 1); c++) {
       const val = headerRow[c];
       if (typeof val === 'number' && val > 40000 && val < 50000) {
         const d = XLSX.SSF.parse_date_code(val);
-        const yyyy = d.y;
-        const mm = String(d.m).padStart(2, '0');
-        const dd = String(d.d).padStart(2, '0');
-        const dateStr = `${yyyy}-${mm}-${dd}`;
+        const dateStr = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
         dateColumns.push({
           colIndex: c,
-          serial: val,
           dateStr,
-          date: new Date(Date.UTC(yyyy, d.m - 1, d.d, 0, 0, 0))
+          date: new Date(Date.UTC(d.y, d.m - 1, d.d))
         });
       }
     }
 
-    // Units
+    if (dateColumns.length === 0) {
+      throw new Error('No date columns found in the Excel file (expected serial numbers in columns 35+).');
+    }
+
+    const month = dateColumns[0].dateStr.substring(0, 7);
+
+    // ===== 2. CLASSIFY EVERY ROW =====
+    const orderItemRows: { rowIndex: number; row: any[]; lineName: string }[] = [];
+    const lineSubtotals: Record<string, Record<string, any[]>> = {};
+    let currentLineName: string | null = null;
+
+    for (let i = 0; i < dataRows.length; i++) {
+      const row = dataRows[i];
+      if (!row || row.every((c: any) => c === null || c === undefined)) continue;
+
+      const lineName = safeStr(row[C.LINE]);
+      if (lineName && /^[UB]/.test(lineName)) {
+        currentLineName = lineName;
+      }
+
+      if (isOrderItemRow(row)) {
+        orderItemRows.push({ rowIndex: i, row, lineName: currentLineName || lineName || '' });
+      } else if (isSubtotalRow(row)) {
+        const type = getSubtotalType(row);
+        const ln = currentLineName || lineName;
+        if (ln && type) {
+          if (!lineSubtotals[ln]) lineSubtotals[ln] = {};
+          lineSubtotals[ln][type] = row;
+        }
+      }
+    }
+
+    // ===== 3. SETUP UNITS =====
     const unitMap = new Map<string, string>();
-    const rawUnits = [
+    const unitDefs = [
       { code: 'U02', name: 'Unit 02 (B1U2)' },
       { code: 'U03', name: 'Unit 03 (B1U3)' },
       { code: 'U04', name: 'Unit 04 (B1U4)' },
-      { code: 'B2', name: 'Unit B2' }
+      { code: 'B2',  name: 'Unit B2' }
     ];
 
-    for (const u of rawUnits) {
+    for (const u of unitDefs) {
       let unit = await prisma.unit.findUnique({ where: { code: u.code } });
       if (!unit) {
         unit = await prisma.unit.create({
@@ -71,65 +210,47 @@ export async function parseAndImportExcel(buffer: Buffer, fileName: string): Pro
       unitMap.set(u.code, unit.id);
     }
 
-    function normalizeUnit(rawUnit: string, lineName: string): string {
-      if (!rawUnit && lineName) {
-        if (lineName.startsWith('U02')) return 'U02';
-        if (lineName.startsWith('U03')) return 'U03';
-        if (lineName.startsWith('U04')) return 'U04';
-        if (lineName.startsWith('B2')) return 'B2';
-      }
-      if (rawUnit === 'B1U2' || rawUnit === 'U02') return 'U02';
-      if (rawUnit === 'B1U3' || rawUnit === 'U03') return 'U03';
-      if (rawUnit === 'B1U4' || rawUnit === 'U04') return 'U04';
-      if (rawUnit === 'B2' || rawUnit === 'B2  ') return 'B2';
-      return 'U02';
-    }
-
-    // Batch creation
+    // ===== 4. BATCH CREATION =====
     const batchId = crypto.randomUUID();
-    const batch = await prisma.importBatch.create({
+    await prisma.importBatch.create({
       data: {
         id: batchId,
         fileName,
         fileSize: buffer.length,
-        month: dateColumns[0]?.dateStr?.substring(0, 7) || '2026-10',
-        totalRows: rows.length - 1,
+        month,
+        totalRows: dataRows.length,
         status: 'PROCESSING'
       }
     });
 
+    // ===== 5. EXTRACT LINES & BUYERS =====
     const lineDefMap = new Map<string, any>();
     const buyerDefMap = new Map<string, any>();
 
-    // Scan lines & buyers
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row || row.length === 0) continue;
-      const lineName = (row[0] || '').toString().trim();
-      const manpowerRaw = row[1];
-      const unitRaw = (row[2] || '').toString().trim();
-      const buyerRaw = (row[4] || '').toString().trim();
-      const col33 = (row[33] || '').toString().trim();
+    for (const { row, lineName } of orderItemRows) {
+      const ln = lineName || safeStr(row[C.LINE]) || '';
+      if (!ln) continue;
 
-      if (lineName && !lineDefMap.has(lineName)) {
-        const unitCode = normalizeUnit(unitRaw, lineName);
+      const buyerRaw = safeStr(row[C.BUYER]);
+      const manpowerRaw = row[C.MANPOWER];
+      const unitRaw = safeStr(row[C.UNIT]) || '';
+
+      if (!lineDefMap.has(ln)) {
+        const unitCode = normalizeUnitCode(unitRaw, ln);
         const unitId = unitMap.get(unitCode) || unitMap.get('U02')!;
-        lineDefMap.set(lineName, {
+        lineDefMap.set(ln, {
           id: crypto.randomUUID(),
-          name: lineName,
+          name: ln,
           unitId,
           unitCode,
-          manpower: typeof manpowerRaw === 'number' && manpowerRaw > 0 ? manpowerRaw : 25,
+          manpower: (typeof manpowerRaw === 'number' && manpowerRaw > 0) ? manpowerRaw : 25,
           workingHours: 10.0,
           status: 'ACTIVE'
         });
       }
 
-      if (buyerRaw && col33 !== 'Plan/Day' && col33 !== 'SAH' && !buyerDefMap.has(buyerRaw)) {
-        buyerDefMap.set(buyerRaw, {
-          id: crypto.randomUUID(),
-          name: buyerRaw
-        });
+      if (buyerRaw && !buyerDefMap.has(buyerRaw)) {
+        buyerDefMap.set(buyerRaw, { id: crypto.randomUUID(), name: buyerRaw });
       }
     }
 
@@ -152,128 +273,132 @@ export async function parseAndImportExcel(buffer: Buffer, fileName: string): Pro
       }
     }
 
-    // Collect Orders & Daily
+    // ===== 6. CREATE ORDERS (from order item rows only) =====
     const ordersToInsert: any[] = [];
-    const dailyRecordsToInsert: any[] = [];
+    let totalPlanQty = 0;
+    let totalOdrQty = 0;
 
-    function getActualVariance(lineIndex: number, dateIndex: number) {
-      const seed = (lineIndex * 17 + dateIndex * 31) % 100;
-      if (lineIndex % 8 === 0) return 0.96 + (seed % 10) * 0.01;
-      if (lineIndex % 7 === 0) return 0.58 + (seed % 16) * 0.01;
-      if (lineIndex % 5 === 0) return 0.72 + (seed % 10) * 0.01;
-      return 0.82 + (seed % 14) * 0.01;
-    }
+    for (const { row, lineName } of orderItemRows) {
+      const ln = lineName || safeStr(row[C.LINE]) || '';
+      const buyerRaw = safeStr(row[C.BUYER]);
+      if (!ln || !buyerRaw) continue;
 
-    let lineIndex = 0;
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row || row.length === 0) continue;
-
-      const lineName = (row[0] || '').toString().trim();
-      const buyerRaw = (row[4] || '').toString().trim();
-      const col33 = (row[33] || '').toString().trim();
-
-      if (!lineName || !buyerRaw || col33 === 'Plan/Day' || col33 === 'SAH' || col33 === 'Machine HR' || col33 === 'Effi. plan/D') {
-        continue;
-      }
-
-      const lineObj = lineDefMap.get(lineName);
+      const lineObj = lineDefMap.get(ln);
       const buyerObj = buyerDefMap.get(buyerRaw);
       if (!lineObj || !buyerObj) continue;
 
-      lineIndex++;
-      const orderId = crypto.randomUUID();
-      const orderCode = (row[5] || `ORD-${lineName}-${i}`).toString().trim();
-      const ocs = row[6] ? row[6].toString().trim() : null;
-      const subOc = row[7] ? row[7].toString().trim() : null;
-      const styleRef = row[8] ? row[8].toString().trim() : 'N/A';
-      const article = row[13] ? row[13].toString().trim() : null;
-      const season = row[14] ? row[14].toString().trim() : 'N/A';
-      const poNo = row[15] ? row[15].toString().trim() : null;
-      const color = row[16] ? row[16].toString().trim() : null;
-      const orderQty = typeof row[17] === 'number' ? Math.round(row[17]) : 0;
-      const smv = typeof row[18] === 'number' ? Number(row[18].toFixed(2)) : 2.5;
-      const mainCategory = row[19] ? row[19].toString().trim() : 'UNDERWEAR';
-      const subCategory = row[20] ? row[20].toString().trim() : 'BOXER';
-      const productType = row[21] ? row[21].toString().trim() : 'P1';
-      const orderStatus = row[3] ? row[3].toString().trim() : 'Confirmed';
-      const fobPrice = typeof row[30] === 'number' ? Number(row[30].toFixed(2)) : 0.0;
-      const salesValue = typeof row[31] === 'number' ? Number(row[31].toFixed(2)) : 0.0;
-      const planQty = typeof row[34] === 'number' ? Math.round(row[34]) : 0;
+      const orderCode = safeStr(row[C.ORDER_CODE]) || `ORD-${ln}-UNKNOWN`;
+      const odrQty = safeInt(row[C.ODR_QTY], 0);
+      const planQty = safeInt(row[C.PLAN_QTY], 0);
+      const smv = safeFloat(row[C.SMV], 2.5);
+
+      totalPlanQty += planQty;
+      totalOdrQty += odrQty;
 
       ordersToInsert.push({
-        id: orderId,
-        orderCode: `${orderCode}-${Date.now()}-${i}`,
-        ocs,
-        subOc,
+        id: crypto.randomUUID(),
+        orderCode,
+        ocs: safeStr(row[C.OCS]),
+        subOc: safeStr(row[C.SUB_OC]),
         buyerId: buyerObj.id,
         buyerName: buyerRaw,
         unitId: lineObj.unitId,
         unitCode: lineObj.unitCode,
         lineId: lineObj.id,
-        lineName,
-        styleRef,
-        article,
-        season,
-        poNo,
-        color,
-        orderQty,
+        lineName: ln,
+        styleRef: safeStr(row[C.STYLE_REF]) || 'N/A',
+        article: safeStr(row[C.ARTICLE]),
+        season: safeStr(row[C.SEASON]) || 'N/A',
+        poNo: safeStr(row[C.PO_NO]),
+        color: safeStr(row[C.COLOR]),
+        orderQty: odrQty,
         planQty,
         smv,
-        mainCategory,
-        subCategory,
-        productType,
-        orderStatus,
-        fobPrice,
-        salesValue,
-        leadMerchant: row[11] ? row[11].toString().trim() : null,
-        orderDept: row[10] ? row[10].toString().trim() : null,
+        mainCategory: safeStr(row[C.MAIN_CAT]) || null,
+        subCategory: safeStr(row[C.SUB_CAT]) || null,
+        productType: safeStr(row[C.TYPE]) || null,
+        orderStatus: safeStr(row[C.ORDER_STATUS]) || 'Confirmed',
+        ott: parseExcelDate(row[C.OTT]),
+        revisedOtt: parseExcelDate(row[C.REV_OTT]),
+        pcd: parseExcelDate(row[C.PCD]),
+        psd: parseExcelDate(row[C.PSD]),
+        pfd: parseExcelDate(row[C.PFD]),
+        exFactory: parseExcelDate(row[C.EX_FAC]),
+        revisedDelivery: parseExcelDate(row[C.REV_DEL]),
+        orderCreatedDate: parseExcelDate(row[C.O_CREATED]),
+        fobPrice: safeFloat(row[C.FOB], 0),
+        salesValue: safeFloat(row[C.SALES_VAL], 0),
+        leadMerchant: safeStr(row[C.LEAD_MM]),
+        orderDept: safeStr(row[C.ORDER_DEPT]),
         importBatchId: batchId
       });
+    }
 
-      for (let dIdx = 0; dIdx < dateColumns.length; dIdx++) {
-        const colMeta = dateColumns[dIdx];
-        const targetVal = row[colMeta.colIndex];
-        
-        if (typeof targetVal === 'number' && targetVal > 0) {
-          const targetQty = Math.round(targetVal);
-          const varianceFactor = getActualVariance(lineIndex, dIdx);
-          const actualQty = Math.round(targetQty * varianceFactor);
-          const gap = targetQty - actualQty;
-          const targetSah = Number(((targetQty * smv) / 60).toFixed(2));
-          const actualSah = Number(((actualQty * smv) / 60).toFixed(2));
-          const clockHours = (lineObj.manpower || 25) * 10;
-          const efficiency = Number(((actualSah / clockHours) * 100).toFixed(2));
-          const plannedEfficiency = Number(((targetSah / clockHours) * 100).toFixed(2));
-          const achievementRate = Number(((actualQty / targetQty) * 100).toFixed(2));
+    // ===== 7. CREATE DAILY RECORDS (from Plan/Day subtotal rows) =====
+    const dailyRecordsToInsert: any[] = [];
 
-          dailyRecordsToInsert.push({
-            id: crypto.randomUUID(),
-            date: colMeta.date,
-            dateString: colMeta.dateStr,
-            month: colMeta.dateStr.substring(0, 7),
-            orderId,
-            lineId: lineObj.id,
-            unitId: lineObj.unitId,
-            buyerId: buyerObj.id,
-            targetQty,
-            actualQty,
-            gap,
-            smv,
-            targetSah,
-            actualSah,
-            clockHours,
-            efficiency,
-            plannedEfficiency,
-            achievementRate,
-            manpower: lineObj.manpower || 25,
-            importBatchId: batchId
-          });
-        }
+    // Build map: lineName -> first order
+    const lineFirstOrderMap = new Map<string, any>();
+    for (const order of ordersToInsert) {
+      if (!lineFirstOrderMap.has(order.lineName)) {
+        lineFirstOrderMap.set(order.lineName, order);
       }
     }
 
-    // Insert in chunks
+    for (const [lineName, subtotals] of Object.entries(lineSubtotals)) {
+      const lineObj = lineDefMap.get(lineName);
+      if (!lineObj) continue;
+
+      const planRow = subtotals.PLAN;
+      const sahRow = subtotals.SAH;
+      const clockRow = subtotals.CLOCK_HOURS;
+      const effRow = subtotals.EFFICIENCY;
+
+      if (!planRow) continue;
+
+      const firstOrder = lineFirstOrderMap.get(lineName);
+      if (!firstOrder) continue;
+
+      const buyerObj = buyerDefMap.get(firstOrder.buyerName);
+      if (!buyerObj) continue;
+
+      for (const dc of dateColumns) {
+        const targetQty = safeInt(planRow[dc.colIndex], 0);
+        if (targetQty <= 0) continue;
+
+        const targetSah = safeFloat(sahRow ? sahRow[dc.colIndex] : 0, 0);
+        const clockHours = safeFloat(clockRow ? clockRow[dc.colIndex] : 0, 0);
+        const efficiency = safeFloat(effRow ? effRow[dc.colIndex] : 0, 0);
+
+        const smv = firstOrder.smv || 2.5;
+        const plannedEfficiency = efficiency * 100;
+
+        dailyRecordsToInsert.push({
+          id: crypto.randomUUID(),
+          date: dc.date,
+          dateString: dc.dateStr,
+          month,
+          orderId: firstOrder.id,
+          lineId: lineObj.id,
+          unitId: lineObj.unitId,
+          buyerId: buyerObj.id,
+          targetQty,
+          actualQty: 0,
+          gap: targetQty,
+          smv,
+          targetSah: targetSah > 0 ? targetSah : Number(((targetQty * smv) / 60).toFixed(2)),
+          actualSah: 0,
+          clockHours: clockHours > 0 ? clockHours : (lineObj.manpower || 25) * 10,
+          efficiency: 0,
+          plannedEfficiency: plannedEfficiency > 0 ? Number(plannedEfficiency.toFixed(2)) : 0,
+          achievementRate: 0,
+          manpower: lineObj.manpower || 25,
+          importBatchId: batchId
+        });
+      }
+    }
+
+    // ===== 8. BULK INSERT =====
     const chunkSize = 500;
     for (let i = 0; i < ordersToInsert.length; i += chunkSize) {
       await prisma.order.createMany({ data: ordersToInsert.slice(i, i + chunkSize) });
@@ -283,9 +408,23 @@ export async function parseAndImportExcel(buffer: Buffer, fileName: string): Pro
       await prisma.productionDaily.createMany({ data: dailyRecordsToInsert.slice(i, i + chunkSize) });
     }
 
-    // =========================================================================
-    // STEP 2: AUTOMATED 2ND-PASS RE-CHECK & DATA INTEGRITY AUDIT
-    // =========================================================================
+    // ===== 9. UPDATE UNIT METRICS =====
+    for (const [code, unitId] of unitMap.entries()) {
+      const linesCount = await prisma.productionLine.count({ where: { unitId } });
+      const lineAgg = await prisma.productionLine.aggregate({
+        where: { unitId },
+        _sum: { manpower: true }
+      });
+      await prisma.unit.update({
+        where: { id: unitId },
+        data: {
+          totalLines: linesCount,
+          totalManpower: lineAgg._sum.manpower || 0
+        }
+      });
+    }
+
+    // ===== 10. VERIFICATION =====
     const [dbOrdersCount, dbDailyCount, dbDailyAgg, dbLineStats, dbDates] = await Promise.all([
       prisma.order.count({ where: { importBatchId: batchId } }),
       prisma.productionDaily.count({ where: { importBatchId: batchId } }),
@@ -323,42 +462,37 @@ export async function parseAndImportExcel(buffer: Buffer, fileName: string): Pro
     });
 
     const dbPlannedQty = dbDailyAgg._sum.targetQty || 0;
-    const dbActualQty = dbDailyAgg._sum.actualQty || 0;
-    const dbActualSah = dbDailyAgg._sum.actualSah || 0;
-    const dbClockHours = dbDailyAgg._sum.clockHours || 0;
-    const dbTargetAchievement = dbPlannedQty > 0 ? Number(((dbActualQty / dbPlannedQty) * 100).toFixed(1)) : 0;
-    const dbAverageEfficiency = dbClockHours > 0 ? Number(((dbActualSah / dbClockHours) * 100).toFixed(1)) : 0;
+    const dbTargetSah = dbDailyAgg._sum.targetSah || 0;
 
-    // Integrity Check Results
     const checks = [
       {
-        name: 'Order Count Cross-Check',
+        name: 'Order Count',
         status: dbOrdersCount === ordersToInsert.length ? 'PASSED' : 'FAILED',
         expected: ordersToInsert.length,
         actual: dbOrdersCount,
       },
       {
-        name: 'Daily Records Count Check',
+        name: 'Daily Records Count',
         status: dbDailyCount === dailyRecordsToInsert.length ? 'PASSED' : 'FAILED',
         expected: dailyRecordsToInsert.length,
         actual: dbDailyCount,
       },
       {
-        name: 'Physical Lines Integrity',
+        name: 'Physical Lines',
         status: dbLines.length === lineDefMap.size ? 'PASSED' : 'FAILED',
         expected: lineDefMap.size,
         actual: dbLines.length,
       },
       {
-        name: 'Planned Quantity Zero-Variance Check',
+        name: 'Planned Quantity',
         status: dbPlannedQty > 0 ? 'PASSED' : 'FAILED',
-        expected: `${dbPlannedQty.toLocaleString()} pcs`,
-        actual: `${dbPlannedQty.toLocaleString()} pcs`,
+        expected: `${totalPlanQty.toLocaleString()} pcs (order-level)`,
+        actual: `${dbPlannedQty.toLocaleString()} pcs (daily-level)`,
       },
       {
-        name: 'Production Dates Sequence Check',
+        name: 'Production Dates',
         status: dbDates.length > 0 ? 'PASSED' : 'FAILED',
-        expected: `${dbDates.length} days`,
+        expected: `${dateColumns.length} days`,
         actual: `${dbDates.length} days`,
       }
     ];
@@ -371,19 +505,17 @@ export async function parseAndImportExcel(buffer: Buffer, fileName: string): Pro
       totalChecks: checks.length,
       checks,
       dbPlannedQty,
-      dbActualQty,
+      dbTargetSah,
       dbOrdersCount,
       dbDailyRecordsCount: dbDailyCount,
       dbLinesCount: dbLines.length,
       unitBreakdown,
       datesCount: dbDates.length,
-      actualSah: dbActualSah,
-      efficiency: dbAverageEfficiency,
-      achievement: dbTargetAchievement,
+      totalOdrQty,
+      totalPlanQty,
       verifiedAt: new Date().toISOString()
     };
 
-    // Update batch status with full verification report
     await prisma.importBatch.update({
       where: { id: batchId },
       data: {
@@ -396,14 +528,14 @@ export async function parseAndImportExcel(buffer: Buffer, fileName: string): Pro
     return {
       success: allPassed,
       batchId,
-      totalRows: rows.length - 1,
+      totalRows: dataRows.length,
       importedRows: dbOrdersCount,
-      skippedRows: rows.length - 1 - dbOrdersCount,
+      skippedRows: dataRows.length - orderItemRows.length,
       linesCount: dbLines.length,
       buyersCount: buyerDefMap.size,
       dailyCount: dbDailyCount,
       errors,
-      message: `2-Step Verification Completed: Successfully parsed, saved, and re-checked ${dbOrdersCount.toLocaleString()} orders and ${dbDailyCount.toLocaleString()} daily records across ${dbLines.length} lines.`,
+      message: `Imported ${dbOrdersCount.toLocaleString()} orders and ${dbDailyCount.toLocaleString()} daily records across ${dbLines.length} lines. Plan QTY: ${totalPlanQty.toLocaleString()} pcs.`,
       verification
     };
   } catch (err: any) {

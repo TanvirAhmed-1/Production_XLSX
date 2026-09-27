@@ -16,6 +16,7 @@ import { ManpowerAnalysis } from "@/components/dashboard/manpower-analysis";
 import { ManagementSummary } from "@/components/dashboard/management-summary";
 import { OrdersTable } from "@/components/orders/orders-table";
 import { ExcelMasterSheet } from "@/components/dashboard/excel-master-sheet";
+import { SignoffPlanSummary } from "@/components/dashboard/signoff-plan-summary";
 import { ExcelImportModal } from "@/components/modals/excel-import-modal";
 import { LineDrilldownModal } from "@/components/modals/line-drilldown-modal";
 import { SettingsModal } from "@/components/modals/settings-modal";
@@ -491,6 +492,13 @@ export default function DashboardPage() {
                     onOpenSettings={() => setIsSettingsModalOpen(true)}
                   />
 
+                  {/* Sign-Off Plan Summary Section (Same as Excel Summary Sheet) */}
+                  <SignoffPlanSummary
+                    month={filters.month !== "ALL" ? filters.month : "2026-10"}
+                    batchId={filters.batchId}
+                    unitCode={filters.unitCode}
+                  />
+
                   {/* Unit Performance Section */}
                   <UnitPerformanceSection
                     units={dashboardData.unitPerformance}
@@ -522,6 +530,17 @@ export default function DashboardPage() {
                   <ProductionCalendar
                     days={dashboardData.efficiencyTrend}
                     onSelectDate={handleDateClick}
+                  />
+                </div>
+              )}
+
+              {/* TAB: SIGN-OFF PLAN SUMMARY (SAME AS EXCEL SUMMARY SHEET) */}
+              {activeTab === "signoff-summary" && (
+                <div className="space-y-6">
+                  <SignoffPlanSummary
+                    month={filters.month !== "ALL" ? filters.month : "2026-10"}
+                    batchId={filters.batchId}
+                    unitCode={filters.unitCode}
                   />
                 </div>
               )}
