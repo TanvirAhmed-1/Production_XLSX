@@ -1,0 +1,191 @@
+// Prisma schema file for Garments Production Planning & Analytics
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  role      String   @default("USER")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Unit {
+  id            String           @id @default(cuid())
+  code          String           @unique // e.g. "U02", "U03", "U04", "B2"
+  name          String           // e.g. "Unit 02", "Unit 03"
+  totalLines    Int              @default(0)
+  totalManpower Int              @default(0)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  lines         ProductionLine[]
+  orders        Order[]
+  dailyRecords  ProductionDaily[]
+
+  @@map("units")
+}
+
+model ProductionLine {
+  id           String            @id @default(cuid())
+  name         String            @unique // e.g. "U02-01", "B2U2-05"
+  unitId       String
+  unitCode     String
+  manpower     Int               @default(25)
+  workingHours Float             @default(10.0)
+  status       String            @default("ACTIVE")
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  unit         Unit              @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  orders       Order[]
+  dailyRecords ProductionDaily[]
+
+  @@index([unitId])
+  @@index([unitCode])
+  @@map("production_lines")
+}
+
+model Buyer {
+  id           String            @id @default(cuid())
+  name         String            @unique // e.g. "MS", "HEMA", "GAP", "TESCO", "NEXT"
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  orders       Order[]
+  dailyRecords ProductionDaily[]
+
+  @@map("buyers")
+}
+
+model Order {
+  id            String            @id @default(cuid())
+  orderCode     String            // e.g. SQBIR.MS.01201.FY25-26::KC.FBRIEF...
+  ocs           String?
+  subOc         String?
+  buyerId       String
+  buyerName     String
+  unitId        String
+  unitCode      String
+  lineId        String?
+  lineName      String?
+  styleRef      String?
+  article       String?
+  season        String?
+  poNo          String?
+  color         String?
+  orderQty      Int               @default(0)
+  planQty       Int               @default(0)
+  smv           Float             @default(0.0)
+  mainCategory  String?
+  subCategory   String?
+  productType   String?
+  orderStatus   String            @default("Confirmed")
+  ott           DateTime?
+  revisedOtt    DateTime?
+  pcd           DateTime?
+  psd           DateTime?
+  pfd           DateTime?
+  exFactory     DateTime?
+  revisedDelivery DateTime?
+  orderCreatedDate DateTime?
+  fobPrice      Float?            @default(0.0)
+  salesValue    Float?            @default(0.0)
+  leadMerchant  String?
+  orderDept     String?
+  importBatchId String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  buyer         Buyer             @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  unit          Unit              @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  line          ProductionLine?   @relation(fields: [lineId], references: [id], onDelete: SetNull)
+  importBatch   ImportBatch?      @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  dailyRecords  ProductionDaily[]
+
+  @@index([buyerId])
+  @@index([unitId])
+  @@index([lineId])
+  @@index([styleRef])
+  @@index([poNo])
+  @@index([season])
+  @@index([orderStatus])
+  @@map("orders")
+}
+
+model ProductionDaily {
+  id              String          @id @default(cuid())
+  date            DateTime
+  dateString      String          // YYYY-MM-DD
+  month           String          // e.g. "2026-10"
+  orderId         String
+  lineId          String
+  unitId          String
+  buyerId         String
+  targetQty       Int             @default(0)
+  actualQty       Int             @default(0)
+  gap             Int             @default(0)
+  smv             Float           @default(0.0)
+  targetSah       Float           @default(0.0)
+  actualSah       Float           @default(0.0)
+  clockHours      Float           @default(0.0)
+  efficiency      Float           @default(0.0) // (actualSah / clockHours) * 100
+  plannedEfficiency Float         @default(0.0) // (targetSah / clockHours) * 100
+  achievementRate Float           @default(0.0) // (actualQty / targetQty) * 100
+  manpower        Int             @default(25)
+  importBatchId   String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  order           Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  line            ProductionLine  @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  unit            Unit            @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  buyer           Buyer           @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  importBatch     ImportBatch?    @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+
+  @@index([date])
+  @@index([dateString])
+  @@index([month])
+  @@index([unitId])
+  @@index([lineId])
+  @@index([buyerId])
+  @@index([orderId])
+  @@map("production_daily")
+}
+
+model ImportBatch {
+  id           String            @id @default(cuid())
+  fileName     String
+  fileSize     Int               @default(0)
+  month        String            @default("2026-10")
+  totalRows    Int               @default(0)
+  importedRows Int               @default(0)
+  skippedRows  Int               @default(0)
+  status       String            @default("SUCCESS")
+  summary      String?           // JSON summary string
+  createdAt    DateTime          @default(now())
+
+  orders       Order[]
+  dailyRecords ProductionDaily[]
+
+  @@map("import_batches")
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
