@@ -74,20 +74,15 @@ const C = {
 
 function normalizeUnitCode(rawUnit, lineName) {
   const unit = (rawUnit || '').toString().trim();
+  if (unit) return unit;
+  
   const line = (lineName || '').toString().trim();
-  
-  if (unit === 'B1U2' || unit === 'U02') return 'U02';
-  if (unit === 'B1U3' || unit === 'U03') return 'U03';
-  if (unit === 'B1U4' || unit === 'U04') return 'U04';
-  if (unit === 'B2' || unit === 'B2  ' || unit.startsWith('B2')) return 'B2';
-  
-  // Fallback: derive from line name
-  if (line.startsWith('U02')) return 'U02';
-  if (line.startsWith('U03')) return 'U03';
-  if (line.startsWith('U04')) return 'U04';
+  if (line.includes('U02') || line.includes('B1U2')) return 'B1U2';
+  if (line.includes('U03') || line.includes('B1U3')) return 'B1U3';
+  if (line.includes('U04') || line.includes('B1U4')) return 'B1U4';
   if (line.startsWith('B2')) return 'B2';
   
-  return 'U02';
+  return 'Unknown';
 }
 
 function safeStr(val) {
@@ -241,17 +236,19 @@ async function seed() {
   
   // ===== 4. CREATE UNITS =====
   const unitMap = new Map();
-  const unitDefs = [
-    { code: 'U02', name: 'Unit 02 (B1U2)' },
-    { code: 'U03', name: 'Unit 03 (B1U3)' },
-    { code: 'U04', name: 'Unit 04 (B1U4)' },
-    { code: 'B2',  name: 'Unit B2' }
-  ];
+  const uniqueUnitCodes = new Set();
   
-  for (const u of unitDefs) {
+  for (const { row, lineName } of orderItemRows) {
+    const unitRaw = safeStr(row[C.UNIT]) || '';
+    const ln = lineName || safeStr(row[C.LINE]) || '';
+    const unitCode = normalizeUnitCode(unitRaw, ln);
+    uniqueUnitCodes.add(unitCode);
+  }
+  
+  for (const code of uniqueUnitCodes) {
     const id = crypto.randomUUID();
-    await prisma.unit.create({ data: { id, code: u.code, name: u.name } });
-    unitMap.set(u.code, id);
+    await prisma.unit.create({ data: { id, code, name: code } });
+    unitMap.set(code, id);
   }
   
   // ===== 5. EXTRACT UNIQUE LINES AND BUYERS =====
@@ -420,12 +417,12 @@ async function seed() {
     if (!buyerObj) continue;
     
     for (const dc of dateColumns) {
-      const targetQty = safeInt(planRow[dc.colIndex], 0);
-      if (targetQty <= 0) continue; // Skip days with no planned production
+      const targetQty = planRow[dc.colIndex] !== null && planRow[dc.colIndex] !== undefined ? safeInt(planRow[dc.colIndex]) : null;
+      if (targetQty === null || targetQty <= 0) continue; // Skip days with no planned production
       
-      const targetSah = safeFloat(sahRow ? sahRow[dc.colIndex] : 0, 0);
-      const clockHours = safeFloat(clockRow ? clockRow[dc.colIndex] : 0, 0);
-      const efficiency = safeFloat(effRow ? effRow[dc.colIndex] : 0, 0);
+      const targetSahVal = sahRow && sahRow[dc.colIndex] !== null && sahRow[dc.colIndex] !== undefined ? safeFloat(sahRow[dc.colIndex]) : null;
+      const clockHoursVal = clockRow && clockRow[dc.colIndex] !== null && clockRow[dc.colIndex] !== undefined ? safeFloat(clockRow[dc.colIndex]) : null;
+      const efficiencyVal = effRow && effRow[dc.colIndex] !== null && effRow[dc.colIndex] !== undefined ? safeFloat(effRow[dc.colIndex]) : null;
       
       // This is a PLAN file — actual output is not available
       // Set actual = 0, will be updated when actuals are imported
@@ -433,7 +430,7 @@ async function seed() {
       const gap = targetQty - actualQty;
       const smv = firstOrder.smv || 2.5;
       const actualSah = 0;
-      const plannedEfficiency = efficiency * 100; // Excel stores as decimal (0.65 = 65%)
+      const plannedEfficiency = efficiencyVal !== null ? efficiencyVal * 100 : null; // Excel stores as decimal (0.65 = 65%)
       const achievementRate = 0;
       
       dailyRecordsToInsert.push({
@@ -441,19 +438,19 @@ async function seed() {
         date: dc.date,
         dateString: dc.dateStr,
         month: '2026-10',
-        orderId: firstOrder.id,
+        orderId: null,
         lineId: lineObj.id,
         unitId: lineObj.unitId,
-        buyerId: buyerObj.id,
+        buyerId: null,
         targetQty,
         actualQty,
         gap,
         smv,
-        targetSah: targetSah > 0 ? targetSah : Number(((targetQty * smv) / 60).toFixed(2)),
+        targetSah: targetSahVal,
         actualSah,
-        clockHours: clockHours > 0 ? clockHours : (lineObj.manpower || 25) * 10,
+        clockHours: clockHoursVal,
         efficiency: 0,
-        plannedEfficiency: plannedEfficiency > 0 ? Number(plannedEfficiency.toFixed(2)) : 0,
+        plannedEfficiency: plannedEfficiency,
         achievementRate,
         manpower: lineObj.manpower || 25,
         importBatchId: batchId
@@ -538,7 +535,7 @@ async function seed() {
   console.log('║             IMPORT COMPLETED SUCCESSFULLY               ║');
   console.log('╠══════════════════════════════════════════════════════════╣');
   console.log(`║  Units:          ${String(unitMap.size).padStart(6)}                              ║`);
-  console.log(`║  Lines:          ${String(lineDefMap.size).padStart(6)}   (U02:${unitLineCounts['U02'] || 0} U03:${unitLineCounts['U03'] || 0} U04:${unitLineCounts['U04'] || 0} B2:${unitLineCounts['B2'] || 0})  ║`);
+  console.log(`║  Lines:          ${String(lineDefMap.size).padStart(6)}                                ║`);
   console.log(`║  Buyers:         ${String(buyerDefMap.size).padStart(6)}                              ║`);
   console.log(`║  Orders:         ${String(ordersToInsert.length).padStart(6)}                              ║`);
   console.log(`║  Daily Records:  ${String(dailyRecordsToInsert.length).padStart(6)}                              ║`);

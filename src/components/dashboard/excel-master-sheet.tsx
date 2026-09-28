@@ -38,6 +38,7 @@ export function ExcelMasterSheet({ initialMonth = "2026-10", onExport }: ExcelMa
   const [totalPages, setTotalPages] = useState(1);
   const [totalRows, setTotalRows] = useState(0);
   const [summaryTotals, setSummaryTotals] = useState<any>({});
+  const [lineSummaries, setLineSummaries] = useState<Record<string, Record<string, any>>>({});
 
   // Filter States
   const [search, setSearch] = useState("");
@@ -104,6 +105,7 @@ export function ExcelMasterSheet({ initialMonth = "2026-10", onExport }: ExcelMa
         setTotalPages(data.totalPages || 1);
         setTotalRows(data.totalRows || 0);
         setSummaryTotals(data.summary || {});
+        setLineSummaries(data.lineSummaries || {});
       }
     } catch (err) {
       console.error("Failed to fetch Excel sheet data:", err);
@@ -140,6 +142,15 @@ export function ExcelMasterSheet({ initialMonth = "2026-10", onExport }: ExcelMa
 
     return { dayTotals: totals, totalPlan, totalActual };
   }, [rows, dateColumns]);
+
+  const groupedRows = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    for (const row of rows) {
+      if (!groups[row.lineName]) groups[row.lineName] = [];
+      groups[row.lineName].push(row);
+    }
+    return groups;
+  }, [rows]);
 
   const handleExportSheet = () => {
     const params = new URLSearchParams({
@@ -392,139 +403,201 @@ export function ExcelMasterSheet({ initialMonth = "2026-10", onExport }: ExcelMa
                   </td>
                 </tr>
               ) : (
-                rows.map((row) => {
-                  const isLow = row.actualQty < row.planQty * 0.75;
-                  return (
-                    <tr
-                      key={row.id}
-                      className="hover:bg-amber-50/60 dark:hover:bg-slate-850/80 transition-colors whitespace-nowrap group"
-                    >
-                      {/* Frozen row index */}
-                      <td className="px-2.5 py-1.5 border-r border-slate-200 dark:border-slate-800 text-center font-mono text-[11px] text-slate-400 bg-slate-50/80 dark:bg-slate-900/80 sticky left-0 z-20 group-hover:bg-amber-100/80 dark:group-hover:bg-slate-800">
-                        {row.rowIndex}
-                      </td>
-
-                      {/* Frozen Line */}
-                      <td className="px-3 py-1.5 border-r border-slate-200 dark:border-slate-800 font-bold text-slate-900 dark:text-slate-100 bg-slate-50/80 dark:bg-slate-900/80 sticky left-10 z-20 group-hover:bg-amber-100/80 dark:group-hover:bg-slate-800">
-                        {row.lineName}
-                      </td>
-
-                      {/* Frozen Unit */}
-                      <td className="px-2.5 py-1.5 border-r border-slate-200 dark:border-slate-800 text-center bg-slate-50/80 dark:bg-slate-900/80 sticky left-28 z-20 group-hover:bg-amber-100/80 dark:group-hover:bg-slate-800">
-                        <Badge variant="outline" className="text-[10px] py-0 px-1 font-semibold text-slate-600 border-slate-300 dark:border-slate-700 dark:text-slate-300">
-                          {row.unitCode}
-                        </Badge>
-                      </td>
-
-                      {/* Buyer */}
-                      <td className="px-3 py-1.5 border-r border-slate-200 dark:border-slate-800 font-semibold text-slate-800 dark:text-slate-200">
-                        {row.buyerName}
-                      </td>
-
-                      {/* Style Ref */}
-                      <td className="px-3 py-1.5 border-r border-slate-200 dark:border-slate-800 font-medium text-sky-700 dark:text-sky-300">
-                        {row.styleRef}
-                      </td>
-
-                      {/* PO NO */}
-                      <td className="px-3 py-1.5 border-r border-slate-200 dark:border-slate-800 font-mono text-[11px] text-slate-600 dark:text-slate-400">
-                        {row.poNo}
-                      </td>
-
-                      {/* Color */}
-                      <td className="px-3 py-1.5 border-r border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 max-w-[120px] truncate" title={row.color}>
-                        {row.color}
-                      </td>
-
-                      {/* Season */}
-                      <td className="px-2.5 py-1.5 border-r border-slate-200 dark:border-slate-800 text-center text-slate-500 text-[11px]">
-                        {row.season}
-                      </td>
-
-                      {/* SMV */}
-                      <td className="px-2.5 py-1.5 border-r border-slate-200 dark:border-slate-800 text-right font-mono text-[11px] text-slate-600 dark:text-slate-400">
-                        {row.smv.toFixed(2)}
-                      </td>
-
-                      {/* Operators */}
-                      <td className="px-2.5 py-1.5 border-r border-slate-200 dark:border-slate-800 text-center font-mono text-[11px] text-slate-500">
-                        {row.manpower}
-                      </td>
-
-                      {/* Order Qty */}
-                      <td className="px-3 py-1.5 border-r border-slate-200 dark:border-slate-800 text-right font-mono font-medium">
-                        {row.orderQty.toLocaleString()}
-                      </td>
-
-                      {/* Month Plan Qty */}
-                      <td className="px-3 py-1.5 border-r border-slate-200 dark:border-slate-800 text-right font-mono font-bold text-slate-900 dark:text-slate-100 bg-emerald-50/30 dark:bg-emerald-950/20">
-                        {row.planQty.toLocaleString()}
-                      </td>
-
-                      {/* Status */}
-                      <td className="px-2.5 py-1.5 border-r border-slate-200 dark:border-slate-800 text-center">
-                        <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
-                          {row.orderStatus}
-                        </span>
-                      </td>
-
-                      {/* Day Columns */}
-                      {dateColumns.map((d) => {
-                        const dayVal = row.daily?.[d.dateStr];
-                        const target = dayVal?.target || 0;
-                        const actual = dayVal?.actual || 0;
-
-                        if (!target && !actual) {
-                          return (
-                            <td
-                              key={d.dateStr}
-                              className="px-2 py-1.5 border-r border-slate-200 dark:border-slate-800 text-center text-slate-300 dark:text-slate-700 font-mono text-[11px]"
-                            >
-                              -
-                            </td>
-                          );
-                        }
-
-                        return (
-                          <td
-                            key={d.dateStr}
-                            className="px-2 py-1.5 border-r border-slate-200 dark:border-slate-800 text-right font-mono text-[11px]"
-                          >
-                            {viewMode === "TARGET" && (
-                              <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                {target.toLocaleString()}
-                              </span>
-                            )}
-                            {viewMode === "ACTUAL" && (
-                              <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                                {actual.toLocaleString()}
-                              </span>
-                            )}
-                            {viewMode === "BOTH" && (
-                              <div className="flex flex-col text-[10px] leading-tight">
-                                <span className="text-slate-500">{target}</span>
-                                <span className="font-bold text-emerald-600">{actual}</span>
-                              </div>
-                            )}
+                Object.entries(groupedRows).map(([lineName, lineRows]) => (
+                  <React.Fragment key={lineName}>
+                    {lineRows.map((row) => {
+                      const isLow = row.actualQty < row.planQty * 0.75;
+                      return (
+                        <tr
+                          key={row.id}
+                          className="hover:bg-amber-50/60 dark:hover:bg-slate-850/80 transition-colors whitespace-nowrap group"
+                        >
+                          {/* Frozen row index */}
+                          <td className="px-2.5 py-1.5 border-r border-slate-200 dark:border-slate-800 text-center font-mono text-[11px] text-slate-400 bg-slate-50/80 dark:bg-slate-900/80 sticky left-0 z-20 group-hover:bg-amber-100/80 dark:group-hover:bg-slate-800">
+                            {row.rowIndex}
                           </td>
-                        );
-                      })}
 
-                      {/* Totals */}
-                      <td className="px-3 py-1.5 border-r border-slate-200 dark:border-slate-800 text-right font-mono font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50/30 dark:bg-indigo-950/20">
-                        {row.planQty.toLocaleString()}
-                      </td>
+                          {/* Frozen Line */}
+                          <td className="px-3 py-1.5 border-r border-slate-200 dark:border-slate-800 font-bold text-slate-900 dark:text-slate-100 bg-slate-50/80 dark:bg-slate-900/80 sticky left-10 z-20 group-hover:bg-amber-100/80 dark:group-hover:bg-slate-800">
+                            {row.lineName}
+                          </td>
 
-                      <td className="px-3 py-1.5 border-r border-slate-200 dark:border-slate-800 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/20">
-                        {row.actualQty.toLocaleString()}
-                      </td>
+                          {/* Frozen Unit */}
+                          <td className="px-2.5 py-1.5 border-r border-slate-200 dark:border-slate-800 text-center bg-slate-50/80 dark:bg-slate-900/80 sticky left-28 z-20 group-hover:bg-amber-100/80 dark:group-hover:bg-slate-800">
+                            <Badge variant="outline" className="text-[10px] py-0 px-1 font-semibold text-slate-600 border-slate-300 dark:border-slate-700 dark:text-slate-300">
+                              {row.unitCode}
+                            </Badge>
+                          </td>
 
-                      <td className="px-3 py-1.5 text-right font-mono font-bold text-rose-600 dark:text-rose-400 bg-rose-50/30 dark:bg-rose-950/20">
-                        {row.gapQty > 0 ? `-${row.gapQty.toLocaleString()}` : `+${Math.abs(row.gapQty).toLocaleString()}`}
-                      </td>
-                    </tr>
-                  );
-                })
+                          {/* Buyer */}
+                          <td className="px-3 py-1.5 border-r border-slate-200 dark:border-slate-800 font-semibold text-slate-800 dark:text-slate-200">
+                            {row.buyerName}
+                          </td>
+
+                          {/* Style Ref */}
+                          <td className="px-3 py-1.5 border-r border-slate-200 dark:border-slate-800 font-medium text-sky-700 dark:text-sky-300">
+                            {row.styleRef}
+                          </td>
+
+                          {/* PO NO */}
+                          <td className="px-3 py-1.5 border-r border-slate-200 dark:border-slate-800 font-mono text-[11px] text-slate-600 dark:text-slate-400">
+                            {row.poNo}
+                          </td>
+
+                          {/* Color */}
+                          <td className="px-3 py-1.5 border-r border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 max-w-[120px] truncate" title={row.color}>
+                            {row.color}
+                          </td>
+
+                          {/* Season */}
+                          <td className="px-2.5 py-1.5 border-r border-slate-200 dark:border-slate-800 text-center text-slate-500 text-[11px]">
+                            {row.season}
+                          </td>
+
+                          {/* SMV */}
+                          <td className="px-2.5 py-1.5 border-r border-slate-200 dark:border-slate-800 text-right font-mono text-[11px] text-slate-600 dark:text-slate-400">
+                            {row.smv.toFixed(2)}
+                          </td>
+
+                          {/* Operators */}
+                          <td className="px-2.5 py-1.5 border-r border-slate-200 dark:border-slate-800 text-center font-mono text-[11px] text-slate-500">
+                            {row.manpower}
+                          </td>
+
+                          {/* Order Qty */}
+                          <td className="px-3 py-1.5 border-r border-slate-200 dark:border-slate-800 text-right font-mono font-medium">
+                            {row.orderQty.toLocaleString()}
+                          </td>
+
+                          {/* Month Plan Qty */}
+                          <td className="px-3 py-1.5 border-r border-slate-200 dark:border-slate-800 text-right font-mono font-bold text-slate-900 dark:text-slate-100 bg-emerald-50/30 dark:bg-emerald-950/20">
+                            {row.planQty.toLocaleString()}
+                          </td>
+
+                          {/* Status */}
+                          <td className="px-2.5 py-1.5 border-r border-slate-200 dark:border-slate-800 text-center">
+                            <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+                              {row.orderStatus}
+                            </span>
+                          </td>
+
+                          {/* Day Columns */}
+                          {dateColumns.map((d) => {
+                            const dayVal = row.daily?.[d.dateStr];
+                            const target = dayVal?.target || 0;
+                            const actual = dayVal?.actual || 0;
+
+                            if (!target && !actual) {
+                              return (
+                                <td
+                                  key={d.dateStr}
+                                  className="px-2 py-1.5 border-r border-slate-200 dark:border-slate-800 text-center text-slate-300 dark:text-slate-700 font-mono text-[11px]"
+                                >
+                                  -
+                                </td>
+                              );
+                            }
+
+                            return (
+                              <td
+                                key={d.dateStr}
+                                className="px-2 py-1.5 border-r border-slate-200 dark:border-slate-800 text-right font-mono text-[11px]"
+                              >
+                                {viewMode === "TARGET" && (
+                                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                    {target.toLocaleString()}
+                                  </span>
+                                )}
+                                {viewMode === "ACTUAL" && (
+                                  <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                    {actual.toLocaleString()}
+                                  </span>
+                                )}
+                                {viewMode === "BOTH" && (
+                                  <div className="flex flex-col text-[10px] leading-tight">
+                                    <span className="text-slate-500">{target}</span>
+                                    <span className="font-bold text-emerald-600">{actual}</span>
+                                  </div>
+                                )}
+                              </td>
+                            );
+                          })}
+
+                          {/* Totals */}
+                          <td className="px-3 py-1.5 border-r border-slate-200 dark:border-slate-800 text-right font-mono font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50/30 dark:bg-indigo-950/20">
+                            {row.planQty.toLocaleString()}
+                          </td>
+
+                          <td className="px-3 py-1.5 border-r border-slate-200 dark:border-slate-800 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/20">
+                            {row.actualQty.toLocaleString()}
+                          </td>
+
+                          <td className="px-3 py-1.5 text-right font-mono font-bold text-rose-600 dark:text-rose-400 bg-rose-50/30 dark:bg-rose-950/20">
+                            {row.gapQty > 0 ? `-${row.gapQty.toLocaleString()}` : `+${Math.abs(row.gapQty).toLocaleString()}`}
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                    {/* LINE SUMMARIES */}
+                    {lineSummaries && lineSummaries[lineName] && (
+                      <>
+                        {/* Plan/Day */}
+                        <tr className="bg-sky-50/30 dark:bg-sky-950/20 border-t-2 border-slate-300 dark:border-slate-700 font-semibold">
+                          <td colSpan={13} className="px-3 py-1.5 border-r border-slate-300 dark:border-slate-700 text-right text-[11px] text-sky-800 dark:text-sky-300 uppercase sticky left-0 z-10 bg-sky-50 dark:bg-sky-950">Plan/Day</td>
+                          {dateColumns.map(d => {
+                            const val = lineSummaries[lineName][d.dateStr]?.targetQty;
+                            return (
+                              <td key={d.dateStr} className="px-2 py-1.5 border-r border-slate-300 dark:border-slate-700 text-right font-mono text-[11px] font-bold text-sky-800 dark:text-sky-300 bg-white/50 dark:bg-slate-950/50">
+                                {val > 0 ? val.toLocaleString() : '-'}
+                              </td>
+                            );
+                          })}
+                          <td colSpan={3} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-900 border-l border-slate-300 dark:border-slate-700"></td>
+                        </tr>
+                        {/* SAH */}
+                        <tr className="bg-emerald-50/30 dark:bg-emerald-950/20 font-semibold">
+                          <td colSpan={13} className="px-3 py-1.5 border-r border-slate-300 dark:border-slate-700 text-right text-[11px] text-emerald-800 dark:text-emerald-300 uppercase sticky left-0 z-10 bg-emerald-50 dark:bg-emerald-950">SAH</td>
+                          {dateColumns.map(d => {
+                            const val = lineSummaries[lineName][d.dateStr]?.targetSah;
+                            return (
+                              <td key={d.dateStr} className="px-2 py-1.5 border-r border-slate-300 dark:border-slate-700 text-right font-mono text-[11px] font-bold text-emerald-800 dark:text-emerald-300 bg-white/50 dark:bg-slate-950/50">
+                                {val > 0 ? val.toFixed(2) : '-'}
+                              </td>
+                            );
+                          })}
+                          <td colSpan={3} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-900 border-l border-slate-300 dark:border-slate-700"></td>
+                        </tr>
+                        {/* Machine HR */}
+                        <tr className="bg-amber-50/30 dark:bg-amber-950/20 font-semibold">
+                          <td colSpan={13} className="px-3 py-1.5 border-r border-slate-300 dark:border-slate-700 text-right text-[11px] text-amber-800 dark:text-amber-300 uppercase sticky left-0 z-10 bg-amber-50 dark:bg-amber-950">Machine HR</td>
+                          {dateColumns.map(d => {
+                            const val = lineSummaries[lineName][d.dateStr]?.clockHours;
+                            return (
+                              <td key={d.dateStr} className="px-2 py-1.5 border-r border-slate-300 dark:border-slate-700 text-right font-mono text-[11px] font-bold text-amber-800 dark:text-amber-300 bg-white/50 dark:bg-slate-950/50">
+                                {val > 0 ? val.toFixed(2) : '-'}
+                              </td>
+                            );
+                          })}
+                          <td colSpan={3} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-900 border-l border-slate-300 dark:border-slate-700"></td>
+                        </tr>
+                        {/* Effi. plan/l */}
+                        <tr className="bg-indigo-50/30 dark:bg-indigo-950/20 border-b-4 border-slate-400 dark:border-slate-600 font-semibold">
+                          <td colSpan={13} className="px-3 py-1.5 border-r border-slate-300 dark:border-slate-700 text-right text-[11px] text-indigo-800 dark:text-indigo-300 uppercase sticky left-0 z-10 bg-indigo-50 dark:bg-indigo-950">Effi. plan/l</td>
+                          {dateColumns.map(d => {
+                            const val = lineSummaries[lineName][d.dateStr]?.plannedEfficiency;
+                            return (
+                              <td key={d.dateStr} className="px-2 py-1.5 border-r border-slate-300 dark:border-slate-700 text-right font-mono text-[11px] font-bold text-indigo-800 dark:text-indigo-300 bg-white/50 dark:bg-slate-950/50">
+                                {val > 0 ? val.toFixed(1) + '%' : '-'}
+                              </td>
+                            );
+                          })}
+                          <td colSpan={3} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-900 border-l border-slate-300 dark:border-slate-700"></td>
+                        </tr>
+                      </>
+                    )}
+                  </React.Fragment>
+                ))
               )}
             </tbody>
 

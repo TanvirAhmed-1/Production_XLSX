@@ -61,19 +61,15 @@ const C = {
 
 function normalizeUnitCode(rawUnit: string, lineName: string): string {
   const unit = (rawUnit || '').trim();
+  if (unit) return unit;
+
   const line = (lineName || '').trim();
-
-  if (unit === 'B1U2' || unit === 'U02') return 'U02';
-  if (unit === 'B1U3' || unit === 'U03') return 'U03';
-  if (unit === 'B1U4' || unit === 'U04') return 'U04';
-  if (unit === 'B2' || unit.startsWith('B2')) return 'B2';
-
-  if (line.startsWith('U02')) return 'U02';
-  if (line.startsWith('U03')) return 'U03';
-  if (line.startsWith('U04')) return 'U04';
+  if (line.includes('U02') || line.includes('B1U2')) return 'B1U2';
+  if (line.includes('U03') || line.includes('B1U3')) return 'B1U3';
+  if (line.includes('U04') || line.includes('B1U4')) return 'B1U4';
   if (line.startsWith('B2')) return 'B2';
 
-  return 'U02';
+  return 'Unknown';
 }
 
 function safeStr(val: any): string | null {
@@ -193,21 +189,23 @@ export async function parseAndImportExcel(buffer: Buffer, fileName: string): Pro
 
     // ===== 3. SETUP UNITS =====
     const unitMap = new Map<string, string>();
-    const unitDefs = [
-      { code: 'U02', name: 'Unit 02 (B1U2)' },
-      { code: 'U03', name: 'Unit 03 (B1U3)' },
-      { code: 'U04', name: 'Unit 04 (B1U4)' },
-      { code: 'B2',  name: 'Unit B2' }
-    ];
+    const uniqueUnitCodes = new Set<string>();
 
-    for (const u of unitDefs) {
-      let unit = await prisma.unit.findUnique({ where: { code: u.code } });
+    for (const { row, lineName } of orderItemRows) {
+      const unitRaw = safeStr(row[C.UNIT]) || '';
+      const ln = lineName || safeStr(row[C.LINE]) || '';
+      const unitCode = normalizeUnitCode(unitRaw, ln);
+      uniqueUnitCodes.add(unitCode);
+    }
+
+    for (const code of uniqueUnitCodes) {
+      let unit = await prisma.unit.findUnique({ where: { code } });
       if (!unit) {
         unit = await prisma.unit.create({
-          data: { id: crypto.randomUUID(), code: u.code, name: u.name }
+          data: { id: crypto.randomUUID(), code, name: code }
         });
       }
-      unitMap.set(u.code, unit.id);
+      unitMap.set(code, unit.id);
     }
 
     // ===== 4. BATCH CREATION =====
@@ -237,7 +235,7 @@ export async function parseAndImportExcel(buffer: Buffer, fileName: string): Pro
 
       if (!lineDefMap.has(ln)) {
         const unitCode = normalizeUnitCode(unitRaw, ln);
-        const unitId = unitMap.get(unitCode) || unitMap.get('U02')!;
+        const unitId = unitMap.get(unitCode) || unitMap.values().next().value;
         lineDefMap.set(ln, {
           id: crypto.randomUUID(),
           name: ln,
@@ -363,34 +361,34 @@ export async function parseAndImportExcel(buffer: Buffer, fileName: string): Pro
       if (!buyerObj) continue;
 
       for (const dc of dateColumns) {
-        const targetQty = safeInt(planRow[dc.colIndex], 0);
-        if (targetQty <= 0) continue;
+        const targetQty = planRow[dc.colIndex] !== null && planRow[dc.colIndex] !== undefined ? safeInt(planRow[dc.colIndex]) : null;
+        if (targetQty === null || targetQty <= 0) continue;
 
-        const targetSah = safeFloat(sahRow ? sahRow[dc.colIndex] : 0, 0);
-        const clockHours = safeFloat(clockRow ? clockRow[dc.colIndex] : 0, 0);
-        const efficiency = safeFloat(effRow ? effRow[dc.colIndex] : 0, 0);
+        const targetSahVal = sahRow && sahRow[dc.colIndex] !== null && sahRow[dc.colIndex] !== undefined ? safeFloat(sahRow[dc.colIndex]) : null;
+        const clockHoursVal = clockRow && clockRow[dc.colIndex] !== null && clockRow[dc.colIndex] !== undefined ? safeFloat(clockRow[dc.colIndex]) : null;
+        const efficiencyVal = effRow && effRow[dc.colIndex] !== null && effRow[dc.colIndex] !== undefined ? safeFloat(effRow[dc.colIndex]) : null;
 
         const smv = firstOrder.smv || 2.5;
-        const plannedEfficiency = efficiency * 100;
+        const plannedEfficiency = efficiencyVal !== null ? Number((efficiencyVal * 100).toFixed(2)) : null;
 
         dailyRecordsToInsert.push({
           id: crypto.randomUUID(),
           date: dc.date,
           dateString: dc.dateStr,
           month,
-          orderId: firstOrder.id,
+          orderId: null,
           lineId: lineObj.id,
           unitId: lineObj.unitId,
-          buyerId: buyerObj.id,
+          buyerId: null,
           targetQty,
           actualQty: 0,
           gap: targetQty,
           smv,
-          targetSah: targetSah > 0 ? targetSah : Number(((targetQty * smv) / 60).toFixed(2)),
+          targetSah: targetSahVal,
           actualSah: 0,
-          clockHours: clockHours > 0 ? clockHours : (lineObj.manpower || 25) * 10,
+          clockHours: clockHoursVal,
           efficiency: 0,
-          plannedEfficiency: plannedEfficiency > 0 ? Number(plannedEfficiency.toFixed(2)) : 0,
+          plannedEfficiency: plannedEfficiency,
           achievementRate: 0,
           manpower: lineObj.manpower || 25,
           importBatchId: batchId

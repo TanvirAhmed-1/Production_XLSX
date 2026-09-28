@@ -108,12 +108,12 @@ export async function GET(req: NextRequest) {
 
       for (const d of ord.dailyRecords) {
         dailyMap[d.dateString] = {
-          target: d.targetQty,
-          actual: d.actualQty,
-          eff: d.efficiency,
+          target: d.targetQty || 0,
+          actual: d.actualQty || 0,
+          eff: (d as any).efficiency || 0,
         };
-        totalActual += d.actualQty;
-        totalTarget += d.targetQty;
+        totalActual += d.actualQty || 0;
+        totalTarget += d.targetQty || 0;
       }
 
       return {
@@ -146,6 +146,41 @@ export async function GET(req: NextRequest) {
       };
     });
 
+    // Extract unique line names from the paginated orders
+    const uniqueLineNames = Array.from(new Set(orders.map(o => o.lineName).filter((l): l is string => Boolean(l))));
+
+    // Fetch line summaries (ProductionDaily records without orderId)
+    const lineSummaryRecords = await prisma.productionDaily.findMany({
+      where: {
+        orderId: null,
+        month: month && month !== 'ALL' ? month : undefined,
+        line: {
+          name: { in: uniqueLineNames }
+        }
+      },
+      include: {
+        line: {
+          select: { name: true }
+        }
+      }
+    });
+
+    const lineSummaries: Record<string, Record<string, any>> = {};
+    for (const rec of lineSummaryRecords) {
+      const lineData = (rec as any).line;
+      if (!lineData) continue;
+      const ln = lineData.name;
+      if (!lineSummaries[ln]) {
+        lineSummaries[ln] = {};
+      }
+      lineSummaries[ln][rec.dateString] = {
+        targetQty: rec.targetQty,
+        targetSah: rec.targetSah,
+        clockHours: rec.clockHours,
+        plannedEfficiency: rec.plannedEfficiency,
+      };
+    }
+
     // Calculate Summary Totals for visible rows & global metrics
     const summaryAgg = await prisma.order.aggregate({
       where,
@@ -164,6 +199,7 @@ export async function GET(req: NextRequest) {
       totalPages: Math.ceil(totalCount / pageSize),
       dateColumns,
       rows,
+      lineSummaries,
       summary: {
         totalOrderQty: summaryAgg._sum.orderQty || 0,
         totalPlanQty: summaryAgg._sum.planQty || 0,

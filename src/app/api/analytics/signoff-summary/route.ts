@@ -60,8 +60,8 @@ export async function GET(req: NextRequest) {
     let grandActPcs = 0;
     let grandActSah = 0;
 
-    // Process each unit in standard garments order (U02, U03, U04, B2)
-    const unitOrder = ["U02", "U03", "U04", "B2"];
+    // Process each unit in standard garments order (B1U2, B1U3, B1U4, B2)
+    const unitOrder = ["B1U2", "B1U3", "B1U4", "B2"];
     const sortedUnits = [...units].sort((a, b) => {
       const idxA = unitOrder.indexOf(a.code);
       const idxB = unitOrder.indexOf(b.code);
@@ -132,8 +132,8 @@ export async function GET(req: NextRequest) {
 
       rows.push(unitRow);
 
-      // Accumulate to B1 Total (U02, U03, U04)
-      if (['U02', 'U03', 'U04'].includes(unit.code)) {
+      // Accumulate to B1 Total (B1U2, B1U3, B1U4)
+      if (['B1U2', 'B1U3', 'B1U4'].includes(unit.code)) {
         b1Lines += linesCount;
         b1Mo += manpower;
         b1PlanPcs += planPcs;

@@ -280,14 +280,14 @@ export async function getDashboardData(filters: FilterParams = {}) {
     }
   });
 
-  const buyerIds = buyerStats.map(b => b.buyerId);
+  const buyerIds = buyerStats.map(b => b.buyerId).filter((id): id is string => Boolean(id));
   const buyersInfo = await prisma.buyer.findMany({
     where: { id: { in: buyerIds } }
   });
   const buyersInfoMap = new Map(buyersInfo.map(b => [b.id, b]));
 
   const buyerPerformance = buyerStats.map(b => {
-    const buyer = buyersInfoMap.get(b.buyerId);
+    const buyer = b.buyerId ? buyersInfoMap.get(b.buyerId) : null;
     const target = b._sum.targetQty || 0;
     const actual = b._sum.actualQty || 0;
     const actSah = b._sum.actualSah || 0;
@@ -418,8 +418,8 @@ export async function getOrdersReport(filters: FilterParams = {}, page = 1, page
   ]);
 
   const rows = orders.map(ord => {
-    const totalActual = ord.dailyRecords.reduce((acc, r) => acc + r.actualQty, 0);
-    const totalTarget = ord.dailyRecords.reduce((acc, r) => acc + r.targetQty, 0);
+    const totalActual = ord.dailyRecords.reduce((acc, r) => acc + (r.actualQty || 0), 0);
+    const totalTarget = ord.dailyRecords.reduce((acc, r) => acc + (r.targetQty || 0), 0);
     const remainingQty = Math.max(0, ord.orderQty - totalActual);
     const ach = totalTarget > 0 ? Number(((totalActual / totalTarget) * 100).toFixed(1)) : 0;
     

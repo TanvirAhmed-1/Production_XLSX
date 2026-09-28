@@ -128,29 +128,29 @@ model ProductionDaily {
   date            DateTime
   dateString      String          // YYYY-MM-DD
   month           String          // e.g. "2026-10"
-  orderId         String
+  orderId         String?
   lineId          String
   unitId          String
-  buyerId         String
-  targetQty       Int             @default(0)
-  actualQty       Int             @default(0)
-  gap             Int             @default(0)
-  smv             Float           @default(0.0)
-  targetSah       Float           @default(0.0)
-  actualSah       Float           @default(0.0)
-  clockHours      Float           @default(0.0)
-  efficiency      Float           @default(0.0) // (actualSah / clockHours) * 100
-  plannedEfficiency Float         @default(0.0) // (targetSah / clockHours) * 100
-  achievementRate Float           @default(0.0) // (actualQty / targetQty) * 100
+  buyerId         String?
+  targetQty       Int?            @default(0)
+  actualQty       Int?            @default(0)
+  gap             Int?            @default(0)
+  smv             Float?          @default(0.0)
+  targetSah       Float?          @default(0.0)
+  actualSah       Float?          @default(0.0)
+  clockHours      Float?          @default(0.0)
+  efficiency      Float?          @default(0.0) // (actualSah / clockHours) * 100
+  plannedEfficiency Float?        @default(0.0) // (targetSah / clockHours) * 100
+  achievementRate Float?          @default(0.0) // (actualQty / targetQty) * 100
   manpower        Int             @default(25)
   importBatchId   String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  order           Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order           Order?          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   line            ProductionLine  @relation(fields: [lineId], references: [id], onDelete: Cascade)
   unit            Unit            @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  buyer           Buyer           @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  buyer           Buyer?          @relation(fields: [buyerId], references: [id], onDelete: Cascade)
   importBatch     ImportBatch?    @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
 
   @@index([date])
