@@ -2,224 +2,143 @@
 
 import React from "react";
 import {
-  ShoppingBag,
-  CalendarCheck,
-  CheckCircle2,
-  TrendingUp,
-  Award,
-  AlertOctagon,
   Layers,
+  FileText,
   Users,
+  Package,
   Clock,
-  Target,
-  ArrowUpRight,
-  ArrowDownRight
+  Gauge,
+  TrendingUp,
+  Percent,
+  Calculator,
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
 
-interface KpiData {
-  totalOrderQty: number;
-  totalOrders: number;
-  totalPlannedProduction: number;
-  totalActualProduction: number;
-  totalGap: number;
-  averageEfficiency: number;
-  highestLineEfficiency: number;
-  lowestLineEfficiency: number;
-  totalActiveLines: number;
-  totalRegisteredLines: number;
-  totalManpower: number;
-  totalSAH: number;
-  targetSAH: number;
-  targetAchievementRate: number;
-  status: string;
+interface KPICardsProps {
+  summary: {
+    totalPlanPCS: number;
+    totalSAH: number;
+    totalMachineHour: number;
+    totalWorkingHour: number;
+    overallEfficiency: number;
+    activeLines: number;
+    totalStyles: number;
+    totalBuyers: number;
+    totalCapacity: number;
+    budgetVariancePCS?: number;
+    budgetVarianceSAH?: number;
+    budgetVarianceEfficiency?: number;
+  };
+  onAuditClick: (metric: 'sah' | 'planPCS' | 'machineHour' | 'workingHour' | 'efficiency') => void;
 }
 
-interface KpiCardsProps {
-  data: KpiData;
-  onCardClick?: (kpiKey: string) => void;
-}
-
-function formatNumber(num: number): string {
-  if (num >= 1_000_000) {
-    return (num / 1_000_000).toFixed(2) + "M";
-  }
-  if (num >= 1_000) {
-    return (num / 1_000).toFixed(1) + "k";
-  }
-  return num.toLocaleString();
-}
-
-export function KpiCards({ data, onCardClick }: KpiCardsProps) {
+export function KPICards({ summary, onAuditClick }: KPICardsProps) {
   const cards = [
     {
-      id: "order-qty",
-      title: "Total Order Quantity",
-      value: formatNumber(data.totalOrderQty),
-      rawVal: data.totalOrderQty.toLocaleString() + " pcs",
-      subtitle: `${data.totalOrders.toLocaleString()} active orders`,
-      icon: ShoppingBag,
-      color: "from-blue-500 to-sky-600",
-      iconBg: "bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400",
-      trend: "+4.2% vs last month",
-      trendPositive: true
+      title: "Plan Quantity",
+      value: summary.totalPlanPCS.toLocaleString() + " pcs",
+      subtitle: "Sum of daily style plans",
+      icon: Package,
+      color: "from-blue-600/20 to-blue-500/5 text-blue-400 border-blue-500/30",
+      metric: "planPCS" as const,
+      auditHint: "Click to audit PCS sum",
     },
     {
-      id: "planned-production",
-      title: "Total Planned Production",
-      value: formatNumber(data.totalPlannedProduction),
-      rawVal: data.totalPlannedProduction.toLocaleString() + " pcs",
-      subtitle: "Full month sign-off plan",
-      icon: CalendarCheck,
-      color: "from-indigo-500 to-purple-600",
-      iconBg: "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400",
-      trend: "Signed Off Plan",
-      trendPositive: true
-    },
-    {
-      id: "actual-production",
-      title: "Total Actual Production",
-      value: formatNumber(data.totalActualProduction),
-      rawVal: data.totalActualProduction.toLocaleString() + " pcs",
-      subtitle: `Gap: ${formatNumber(Math.abs(data.totalGap))} pcs`,
-      icon: CheckCircle2,
-      color: "from-emerald-500 to-teal-600",
-      iconBg: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400",
-      trend: `${data.targetAchievementRate}% achieved`,
-      trendPositive: data.targetAchievementRate >= 80
-    },
-    {
-      id: "average-efficiency",
-      title: "Average Efficiency",
-      value: `${data.averageEfficiency}%`,
-      rawVal: `${data.averageEfficiency}%`,
-      subtitle: "Standard factory target: 80%",
-      icon: TrendingUp,
-      color: "from-amber-500 to-orange-600",
-      iconBg: "bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400",
-      trend: data.averageEfficiency >= 80 ? "On Target" : "Below 80% Target",
-      trendPositive: data.averageEfficiency >= 80
-    },
-    {
-      id: "highest-efficiency",
-      title: "Highest Line Efficiency",
-      value: `${data.highestLineEfficiency}%`,
-      rawVal: `${data.highestLineEfficiency}%`,
-      subtitle: "Top performing line",
-      icon: Award,
-      color: "from-teal-500 to-emerald-600",
-      iconBg: "bg-teal-50 text-teal-600 dark:bg-teal-950/60 dark:text-teal-400",
-      trend: "Peak Performance",
-      trendPositive: true
-    },
-    {
-      id: "lowest-efficiency",
-      title: "Lowest Line Efficiency",
-      value: `${data.lowestLineEfficiency}%`,
-      rawVal: `${data.lowestLineEfficiency}%`,
-      subtitle: "Requires management attention",
-      icon: AlertOctagon,
-      color: "from-rose-500 to-red-600",
-      iconBg: "bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-400",
-      trend: "Bottleneck alert",
-      trendPositive: false
-    },
-    {
-      id: "production-lines",
-      title: "Total Production Lines",
-      value: data.totalActiveLines.toString(),
-      rawVal: `${data.totalActiveLines} Lines`,
-      subtitle: data.totalActiveLines > 0 ? "Operational in plan" : "No active lines",
-      icon: Layers,
-      color: "from-cyan-500 to-blue-600",
-      iconBg: "bg-cyan-50 text-cyan-600 dark:bg-cyan-950/60 dark:text-cyan-400",
-      trend: data.totalActiveLines > 0 ? "100% operational" : "0 active lines",
-      trendPositive: data.totalActiveLines > 0
-    },
-    {
-      id: "total-manpower",
-      title: "Total Manpower",
-      value: data.totalManpower.toLocaleString(),
-      rawVal: `${data.totalManpower.toLocaleString()} Operators`,
-      subtitle: data.totalActiveLines > 0 
-        ? `Avg ${(data.totalManpower / data.totalActiveLines).toFixed(1)} workers / line`
-        : "No active operators",
-      icon: Users,
-      color: "from-violet-500 to-indigo-600",
-      iconBg: "bg-violet-50 text-violet-600 dark:bg-violet-950/60 dark:text-violet-400",
-      trend: data.totalManpower > 0 ? "10 hrs/day capacity" : "0 capacity",
-      trendPositive: data.totalManpower > 0
-    },
-    {
-      id: "total-sah",
-      title: "Total Actual SAH",
-      value: formatNumber(data.totalSAH),
-      rawVal: `${data.totalSAH.toLocaleString()} SAH`,
-      subtitle: `Target: ${formatNumber(data.targetSAH)} SAH`,
+      title: "Plan SAH",
+      value: summary.totalSAH.toLocaleString(undefined, { maximumFractionDigits: 1 }) + " SAH",
+      subtitle: "Standard Allowed Hours",
       icon: Clock,
-      color: "from-fuchsia-500 to-pink-600",
-      iconBg: "bg-fuchsia-50 text-fuchsia-600 dark:bg-fuchsia-950/60 dark:text-fuchsia-400",
-      trend: "Std Allowed Hours",
-      trendPositive: true
+      color: "from-purple-600/20 to-purple-500/5 text-purple-400 border-purple-500/30",
+      metric: "sah" as const,
+      auditHint: "Click to audit Σ(Qty×SMV/60)",
     },
     {
-      id: "target-achievement",
-      title: "Target Achievement Rate",
-      value: `${data.targetAchievementRate}%`,
-      rawVal: `${data.targetAchievementRate}%`,
-      subtitle: "Actual / Target output",
-      icon: Target,
-      color: "from-emerald-500 to-green-600",
-      iconBg: "bg-green-50 text-green-600 dark:bg-green-950/60 dark:text-green-400",
-      trend: data.targetAchievementRate >= 90 ? "Excellent" : "In Progress",
-      trendPositive: data.targetAchievementRate >= 85
-    }
+      title: "Machine Hours",
+      value: summary.totalMachineHour.toLocaleString() + " hrs",
+      subtitle: "Direct recap & clock hours",
+      icon: Gauge,
+      color: "from-amber-600/20 to-amber-500/5 text-amber-400 border-amber-500/30",
+      metric: "machineHour" as const,
+      auditHint: "Click to audit machine hours",
+    },
+    {
+      title: "Overall Efficiency",
+      value: summary.overallEfficiency.toFixed(2) + "%",
+      subtitle: "Total SAH / Machine HR",
+      icon: Percent,
+      color: summary.overallEfficiency >= 68
+        ? "from-emerald-600/20 to-emerald-500/5 text-emerald-400 border-emerald-500/30"
+        : "from-rose-600/20 to-rose-500/5 text-rose-400 border-rose-500/30",
+      metric: "efficiency" as const,
+      auditHint: "Click to audit aggregate efficiency",
+    },
+    {
+      title: "Active Lines",
+      value: `${summary.activeLines} / ${summary.totalCapacity}`,
+      subtitle: "Lines with planned production",
+      icon: Layers,
+      color: "from-cyan-600/20 to-cyan-500/5 text-cyan-400 border-cyan-500/30",
+      metric: null,
+    },
+    {
+      title: "Total Styles",
+      value: summary.totalStyles.toLocaleString(),
+      subtitle: "Distinct style references",
+      icon: FileText,
+      color: "from-indigo-600/20 to-indigo-500/5 text-indigo-400 border-indigo-500/30",
+      metric: null,
+    },
+    {
+      title: "Active Buyers",
+      value: summary.totalBuyers.toString(),
+      subtitle: "Customer brands in plan",
+      icon: Users,
+      color: "from-sky-600/20 to-sky-500/5 text-sky-400 border-sky-500/30",
+      metric: null,
+    },
+    {
+      title: "Avg Working Hours",
+      value: summary.totalWorkingHour.toFixed(1) + " hrs/line",
+      subtitle: "Machine HR ÷ Manpower",
+      icon: TrendingUp,
+      color: "from-teal-600/20 to-teal-500/5 text-teal-400 border-teal-500/30",
+      metric: "workingHour" as const,
+      auditHint: "Click to audit working hours",
+    },
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-      {cards.map((card) => {
-        const Icon = card.icon;
-        return (
-          <Card
-            key={card.id}
-            onClick={() => onCardClick?.(card.id)}
-            className="cursor-pointer border border-slate-200/90 hover:border-sky-400 hover:shadow-md transition-all group dark:border-slate-800 dark:hover:border-sky-600"
-          >
-            <CardContent className="p-3.5 sm:p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 truncate max-w-[120px]">
-                  {card.title}
-                </span>
-                <div className={cn("flex h-7 w-7 items-center justify-center rounded-md transition-transform group-hover:scale-110", card.iconBg)}>
-                  <Icon className="h-4 w-4" />
-                </div>
-              </div>
-
-              <div className="mt-2">
-                <div className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-                  {card.value}
-                </div>
-                <div className="mt-1 flex items-center justify-between text-[11px]">
-                  <span className="text-slate-500 dark:text-slate-400 truncate max-w-[110px]" title={card.subtitle}>
-                    {card.subtitle}
-                  </span>
-                  <span
-                    className={cn(
-                      "font-semibold flex items-center text-[10px]",
-                      card.trendPositive ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
-                    )}
-                  >
-                    {card.trendPositive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                    {card.trend}
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {cards.map((c, i) => (
+        <div
+          key={i}
+          onClick={() => c.metric && onAuditClick(c.metric)}
+          className={`relative group p-5 rounded-2xl bg-gradient-to-br ${c.color} bg-slate-900/80 border backdrop-blur-md shadow-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-xl ${
+            c.metric ? "cursor-pointer" : ""
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              {c.title}
+            </span>
+            <div className="p-2.5 rounded-xl bg-slate-800/80 text-white group-hover:bg-slate-700/80 transition">
+              <c.icon className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-2xl font-black tracking-tight text-white">{c.value}</div>
+            <p className="text-xs text-slate-400 mt-1">{c.subtitle}</p>
+          </div>
+          {c.metric && (
+            <div className="mt-3 pt-2.5 border-t border-slate-800/60 flex items-center justify-between text-[11px] text-slate-500 group-hover:text-indigo-400 transition">
+              <span className="flex items-center gap-1">
+                <Calculator className="w-3 h-3" />
+                {c.auditHint}
+              </span>
+              <span className="opacity-0 group-hover:opacity-100 transition">→</span>
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

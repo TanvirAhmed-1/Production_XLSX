@@ -1,146 +1,173 @@
 "use client";
 
-import React from "react";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell
-} from "@/components/ui/table";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Briefcase, ArrowRight, TrendingUp, Download, Eye } from "lucide-react";
-
-interface BuyerData {
-  buyerId: string;
-  buyerName: string;
-  target: number;
-  actual: number;
-  gap: number;
-  sah: number;
-  efficiency: number;
-  achievementRate: number;
-}
+import React, { useState } from "react";
+import { Users, Search, Briefcase, Tag } from "lucide-react";
+import { ProductionReportDTO } from "@/lib/calculations";
 
 interface BuyerPerformanceSectionProps {
-  buyers: BuyerData[];
-  onSelectBuyer?: (buyerName: string) => void;
-  onExport?: () => void;
+  report: ProductionReportDTO;
 }
 
-export function BuyerPerformanceSection({ buyers, onSelectBuyer, onExport }: BuyerPerformanceSectionProps) {
+export function BuyerPerformanceSection({ report }: BuyerPerformanceSectionProps) {
+  const [tab, setTab] = useState<"buyers" | "styles">("buyers");
+  const [search, setSearch] = useState<string>("");
+
+  const filteredBuyers = report.buyerStats.filter(b =>
+    b.buyer.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const filteredStyles = report.styleStats.filter(s =>
+    s.styleRef.toLowerCase().includes(search.toLowerCase()) ||
+    s.buyer.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
-    <Card className="shadow-sm border-slate-200/90 dark:border-slate-800">
-      <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800/80">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="rounded-2xl bg-slate-900 border border-slate-800 shadow-xl overflow-hidden space-y-4">
+      {/* Top Header & Search */}
+      <div className="p-4 border-b border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400">
+            <Briefcase className="w-5 h-5" />
+          </div>
           <div>
-            <CardTitle className="text-base font-bold flex items-center gap-2">
-              <Briefcase className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-              Buyer-wise Production & Efficiency Report
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Performance breakdown and volume distribution across all global buyers and brands
-            </CardDescription>
+            <h3 className="text-base font-bold text-white">
+              Buyers & Style Portfolio Analytics
+            </h3>
+            <p className="text-xs text-slate-400">
+              Distribution of order volume, planned output and SAH across buyers
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Tab Switcher */}
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-950 border border-slate-800">
+            <button
+              onClick={() => setTab("buyers")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                tab === "buyers"
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Buyers ({report.buyerStats.length})
+            </button>
+            <button
+              onClick={() => setTab("styles")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                tab === "styles"
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Styles ({report.styleStats.length})
+            </button>
           </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onExport}
-            className="h-8 gap-1 text-xs border-slate-200 dark:border-slate-700"
-          >
-            <Download className="h-3.5 w-3.5" />
-            <span>Export Buyers</span>
-          </Button>
+          {/* Search */}
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder={`Search ${tab}...`}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="pl-8 pr-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-36"
+            />
+          </div>
         </div>
-      </CardHeader>
+      </div>
 
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-slate-50/80 dark:bg-slate-900/80">
-                <TableHead className="font-semibold">Buyer / Brand</TableHead>
-                <TableHead className="text-right font-semibold">Planned Target (Pcs)</TableHead>
-                <TableHead className="text-right font-semibold">Actual Output (Pcs)</TableHead>
-                <TableHead className="text-right font-semibold">Production Gap</TableHead>
-                <TableHead className="text-right font-semibold">Generated SAH</TableHead>
-                <TableHead className="text-right font-semibold">Efficiency %</TableHead>
-                <TableHead className="text-right font-semibold">Achievement %</TableHead>
-                <TableHead className="text-center font-semibold">Status</TableHead>
-                <TableHead className="text-right font-semibold pr-4">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {buyers.map((buyer) => {
-                let badgeVariant: any = "secondary";
-                let status = "Normal";
-                if (buyer.achievementRate >= 90) {
-                  badgeVariant = "success";
-                  status = "Excellent";
-                } else if (buyer.achievementRate >= 80) {
-                  badgeVariant = "info";
-                  status = "On Track";
-                } else {
-                  badgeVariant = "warning";
-                  status = "Deficit";
-                }
-
-                return (
-                  <TableRow
-                    key={buyer.buyerId}
-                    className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors"
-                  >
-                    <TableCell className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                      <div className="h-2 w-2 rounded-full bg-violet-500" />
-                      <span>{buyer.buyerName}</span>
-                    </TableCell>
-                    <TableCell className="text-right font-mono font-medium">
-                      {buyer.target.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                      {buyer.actual.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-xs font-semibold">
-                      <span className={buyer.gap > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600"}>
-                        {buyer.gap > 0 ? `-${buyer.gap.toLocaleString()}` : `+${Math.abs(buyer.gap).toLocaleString()}`}
+      {/* Table Content */}
+      <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+        {tab === "buyers" ? (
+          <table className="w-full text-xs text-left">
+            <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-[11px] sticky top-0 border-b border-slate-800">
+              <tr>
+                <th className="py-3 px-4">Buyer</th>
+                <th className="py-3 px-4 text-center">Style Count</th>
+                <th className="py-3 px-4 text-right">Order Qty</th>
+                <th className="py-3 px-4 text-right">Plan Qty</th>
+                <th className="py-3 px-4 text-right">Total SAH</th>
+                <th className="py-3 px-4 text-right">Factory Share %</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60 font-mono">
+              {filteredBuyers.map((b, idx) => (
+                <tr key={idx} className="hover:bg-slate-800/50 transition">
+                  <td className="py-3 px-4 font-sans font-bold text-white flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-sky-500" />
+                    {b.buyer}
+                  </td>
+                  <td className="py-3 px-4 text-center text-slate-300 font-sans">{b.styleCount}</td>
+                  <td className="py-3 px-4 text-right text-slate-300">{b.orderQty.toLocaleString()}</td>
+                  <td className="py-3 px-4 text-right font-bold text-slate-100">{b.planQty.toLocaleString()}</td>
+                  <td className="py-3 px-4 text-right text-indigo-400 font-semibold">
+                    {b.sah.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                  </td>
+                  <td className="py-3 px-4 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <div className="w-16 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                        <div
+                          className="h-full bg-sky-500"
+                          style={{ width: `${Math.min(100, b.sharePct)}%` }}
+                        />
+                      </div>
+                      <span className="font-sans font-medium text-slate-300 w-10 text-right">
+                        {b.sharePct.toFixed(1)}%
                       </span>
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-xs text-slate-600 dark:text-slate-400">
-                      {buyer.sah.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right font-mono font-bold text-xs text-indigo-600 dark:text-indigo-400">
-                      {buyer.efficiency}%
-                    </TableCell>
-                    <TableCell className="text-right font-mono font-bold text-xs">
-                      {buyer.achievementRate}%
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant={badgeVariant} className="text-[10px] font-semibold">
-                        {status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right pr-4">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onSelectBuyer?.(buyer.buyerName)}
-                        className="h-7 px-2 text-xs font-semibold text-violet-600 hover:text-violet-700 hover:bg-violet-50 dark:text-violet-400 dark:hover:bg-violet-950/50"
-                      >
-                        <Eye className="h-3.5 w-3.5 mr-1" />
-                        <span>Filter Buyer</span>
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <table className="w-full text-xs text-left">
+            <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-[11px] sticky top-0 border-b border-slate-800">
+              <tr>
+                <th className="py-3 px-4">Style Ref</th>
+                <th className="py-3 px-4">Buyer</th>
+                <th className="py-3 px-4">Article</th>
+                <th className="py-3 px-4 text-right">SMV</th>
+                <th className="py-3 px-4 text-right">Plan Qty</th>
+                <th className="py-3 px-4 text-right">Total SAH</th>
+                <th className="py-3 px-4">Lines Assigned</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60 font-mono">
+              {filteredStyles.map((s, idx) => (
+                <tr key={idx} className="hover:bg-slate-800/50 transition">
+                  <td className="py-3 px-4 font-sans font-bold text-white">{s.styleRef}</td>
+                  <td className="py-3 px-4 font-sans text-slate-300">{s.buyer}</td>
+                  <td className="py-3 px-4 font-sans text-slate-400 max-w-xs truncate" title={s.article || ""}>
+                    {s.article || "—"}
+                  </td>
+                  <td className="py-3 px-4 text-right text-slate-300">{s.smv.toFixed(2)}</td>
+                  <td className="py-3 px-4 text-right font-bold text-slate-100">{s.planQty.toLocaleString()}</td>
+                  <td className="py-3 px-4 text-right text-indigo-400 font-semibold">
+                    {s.sah.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                  </td>
+                  <td className="py-3 px-4 font-sans">
+                    <div className="flex flex-wrap gap-1">
+                      {s.lines.slice(0, 3).map(l => (
+                        <span key={l} className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                          {l}
+                        </span>
+                      ))}
+                      {s.lines.length > 3 && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                          +{s.lines.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
   );
 }

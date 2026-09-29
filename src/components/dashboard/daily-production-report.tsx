@@ -1,184 +1,237 @@
 "use client";
 
-import React from "react";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-  TableFooter
-} from "@/components/ui/table";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Calendar, Download, Eye, TrendingUp, CheckCircle2 } from "lucide-react";
-
-interface DailyProductionRow {
-  date: string;
-  shortDate: string;
-  target: number;
-  actual: number;
-  gap: number;
-  targetSah: number;
-  actualSah: number;
-  efficiency: number;
-  achievementRate: number;
-}
+import React, { useState } from "react";
+import { Calendar, Package, Clock, Gauge, Percent, Layers, AlertCircle } from "lucide-react";
+import { DailySummaryResult, LineDetailResult } from "@/lib/calculations";
 
 interface DailyProductionReportProps {
-  data: DailyProductionRow[];
-  onDateClick?: (dateStr: string) => void;
-  onExport?: () => void;
+  daily: DailySummaryResult[];
+  lineDetail: LineDetailResult;
+  onAuditClick: (params: { metric: 'sah' | 'planPCS' | 'machineHour'; dateKey: string }) => void;
 }
 
-export function DailyProductionReport({ data, onDateClick, onExport }: DailyProductionReportProps) {
-  const totals = React.useMemo(() => {
-    const totalTarget = data.reduce((acc, r) => acc + r.target, 0);
-    const totalActual = data.reduce((acc, r) => acc + r.actual, 0);
-    const totalGap = data.reduce((acc, r) => acc + r.gap, 0);
-    const totalTargetSah = data.reduce((acc, r) => acc + r.targetSah, 0);
-    const totalActualSah = data.reduce((acc, r) => acc + r.actualSah, 0);
-    const avgEff = data.length > 0 ? Number((data.reduce((acc, r) => acc + r.efficiency, 0) / data.length).toFixed(1)) : 0;
-    const avgAch = totalTarget > 0 ? Number(((totalActual / totalTarget) * 100).toFixed(1)) : 0;
+export function DailyProductionReport({
+  daily,
+  lineDetail,
+  onAuditClick,
+}: DailyProductionReportProps) {
+  const [selectedDate, setSelectedDate] = useState<string>(
+    daily.find(d => d.planPCS > 0)?.dateKey || daily[0]?.dateKey || ""
+  );
 
-    return {
-      totalTarget,
-      totalActual,
-      totalGap,
-      totalTargetSah,
-      totalActualSah,
-      avgEff,
-      avgAch
-    };
-  }, [data]);
+  const currentDay = daily.find(d => d.dateKey === selectedDate) || daily[0];
+
+  // Get active lines on this date
+  const linesOnDate = lineDetail.records
+    .map(r => ({
+      unit: r.unit,
+      unitLabel: r.unitLabel,
+      line: r.line,
+      manpower: r.manpower,
+      metric: r.daily[selectedDate] || {
+        pcs: 0,
+        sah: 0,
+        machineHour: 0,
+        workingHour: 0,
+        efficiency: 0,
+      },
+    }))
+    .filter(l => l.metric.pcs > 0 || l.metric.sah > 0)
+    .sort((a, b) => b.metric.pcs - a.metric.pcs);
 
   return (
-    <Card className="shadow-sm border-slate-200/90 dark:border-slate-800">
-      <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800/80">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <CardTitle className="text-base font-bold flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-sky-600 dark:text-sky-400" />
-              Daily Production Report (October 2026)
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Day-by-day production volume, SAH outputs, efficiency rates, and target achievements
-            </CardDescription>
+    <div className="space-y-6">
+      {/* Date Selector Carousel / Bar */}
+      <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg">
+        <div className="flex items-center gap-2 mb-3">
+          <Calendar className="w-4 h-4 text-indigo-400" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">
+            Select Planning Date (October 2026)
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-thin">
+          {daily.map(d => {
+            const isSelected = d.dateKey === selectedDate;
+            const dayNum = d.dateKey.split("-")[2];
+            const hasData = d.planPCS > 0;
+
+            return (
+              <button
+                key={d.dateKey}
+                onClick={() => setSelectedDate(d.dateKey)}
+                className={`flex flex-col items-center min-w-[54px] py-2 px-1.5 rounded-xl border text-xs transition ${
+                  isSelected
+                    ? "bg-indigo-600 border-indigo-500 text-white font-bold shadow-md shadow-indigo-600/30 scale-105"
+                    : d.isWeeklyOff
+                    ? "bg-rose-950/20 border-rose-900/40 text-rose-400/80 hover:bg-rose-950/40"
+                    : hasData
+                    ? "bg-slate-800/80 border-slate-700/80 text-slate-200 hover:bg-slate-700"
+                    : "bg-slate-950/60 border-slate-800 text-slate-500 hover:text-slate-400"
+                }`}
+              >
+                <span className="text-[10px] uppercase">{d.isWeeklyOff ? "Fri" : "Day"}</span>
+                <span className="text-sm font-black">{dayNum}</span>
+                <span className="text-[9px] mt-0.5 opacity-80">
+                  {hasData ? `${(d.planPCS / 1000).toFixed(0)}k` : "—"}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Selected Day KPI Cards */}
+      {currentDay && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div
+            onClick={() => onAuditClick({ metric: "planPCS", dateKey: currentDay.dateKey })}
+            className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 shadow-md hover:border-indigo-500/50 cursor-pointer transition"
+          >
+            <div className="flex items-center justify-between text-slate-400 mb-1">
+              <span className="text-[11px] font-medium uppercase">Plan PCS</span>
+              <Package className="w-4 h-4 text-blue-400" />
+            </div>
+            <div className="text-xl font-bold text-white">
+              {currentDay.planPCS.toLocaleString()}
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">Planned output</p>
           </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onExport}
-            className="h-8 gap-1 text-xs border-slate-200 dark:border-slate-700"
+          <div
+            onClick={() => onAuditClick({ metric: "sah", dateKey: currentDay.dateKey })}
+            className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 shadow-md hover:border-indigo-500/50 cursor-pointer transition"
           >
-            <Download className="h-3.5 w-3.5" />
-            <span>Export Daily Report</span>
-          </Button>
+            <div className="flex items-center justify-between text-slate-400 mb-1">
+              <span className="text-[11px] font-medium uppercase">SAH</span>
+              <Clock className="w-4 h-4 text-purple-400" />
+            </div>
+            <div className="text-xl font-bold text-purple-300">
+              {currentDay.sah.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">Standard Allowed Hours</p>
+          </div>
+
+          <div
+            onClick={() => onAuditClick({ metric: "machineHour", dateKey: currentDay.dateKey })}
+            className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 shadow-md hover:border-indigo-500/50 cursor-pointer transition"
+          >
+            <div className="flex items-center justify-between text-slate-400 mb-1">
+              <span className="text-[11px] font-medium uppercase">Machine HR</span>
+              <Gauge className="w-4 h-4 text-amber-400" />
+            </div>
+            <div className="text-xl font-bold text-amber-300">
+              {currentDay.machineHour.toLocaleString()}
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">Clock capacity</p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 shadow-md">
+            <div className="flex items-center justify-between text-slate-400 mb-1">
+              <span className="text-[11px] font-medium uppercase">Efficiency</span>
+              <Percent className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div className="text-xl font-bold text-emerald-300">
+              {currentDay.efficiency.toFixed(2)}%
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">SAH / Machine HR</p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 shadow-md">
+            <div className="flex items-center justify-between text-slate-400 mb-1">
+              <span className="text-[11px] font-medium uppercase">Running Lines</span>
+              <Layers className="w-4 h-4 text-cyan-400" />
+            </div>
+            <div className="text-xl font-bold text-cyan-300">
+              {currentDay.runningLines}
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">SAH &gt; 0 that day</p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 shadow-md">
+            <div className="flex items-center justify-between text-slate-400 mb-1">
+              <span className="text-[11px] font-medium uppercase">Idle Lines</span>
+              <AlertCircle className="w-4 h-4 text-rose-400" />
+            </div>
+            <div className="text-xl font-bold text-rose-300">
+              {currentDay.idleLines}
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">Capacity - Running</p>
+          </div>
         </div>
-      </CardHeader>
+      )}
 
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-slate-50/80 dark:bg-slate-900/80">
-                <TableHead className="font-semibold">Date</TableHead>
-                <TableHead className="text-right font-semibold">Planned Target (Pcs)</TableHead>
-                <TableHead className="text-right font-semibold">Actual Output (Pcs)</TableHead>
-                <TableHead className="text-right font-semibold">Gap Variance</TableHead>
-                <TableHead className="text-right font-semibold">Target SAH</TableHead>
-                <TableHead className="text-right font-semibold">Actual SAH</TableHead>
-                <TableHead className="text-right font-semibold">Efficiency %</TableHead>
-                <TableHead className="text-right font-semibold">Achievement %</TableHead>
-                <TableHead className="text-center font-semibold">Status</TableHead>
-                <TableHead className="text-right font-semibold pr-4">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.map((row) => {
-                let badgeVariant: any = "secondary";
-                let status = "On Track";
-                if (row.achievementRate >= 95) {
-                  badgeVariant = "success";
-                  status = "High Output";
-                } else if (row.achievementRate >= 80) {
-                  badgeVariant = "info";
-                  status = "Normal";
-                } else {
-                  badgeVariant = "warning";
-                  status = "Below Plan";
-                }
+      {/* Lines Running on this Date */}
+      <div className="rounded-2xl bg-slate-900 border border-slate-800 shadow-xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-bold text-white">
+              Lines Operating on {selectedDate} ({linesOnDate.length} Active Lines)
+            </h4>
+            <p className="text-xs text-slate-400">
+              Output breakdown calculated from individual style orders
+            </p>
+          </div>
+        </div>
 
-                return (
-                  <TableRow
-                    key={row.date}
-                    className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors"
-                  >
-                    <TableCell className="font-bold text-slate-900 dark:text-slate-100">
-                      {row.date}
-                    </TableCell>
-                    <TableCell className="text-right font-mono font-medium">
-                      {row.target.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                      {row.actual.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-xs font-semibold">
-                      <span className={row.gap > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600"}>
-                        {row.gap > 0 ? `-${row.gap.toLocaleString()}` : `+${Math.abs(row.gap).toLocaleString()}`}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-xs text-slate-500">
-                      {row.targetSah.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-xs font-semibold text-slate-800 dark:text-slate-200">
-                      {row.actualSah.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right font-mono font-bold text-xs text-indigo-600 dark:text-indigo-400">
-                      {row.efficiency}%
-                    </TableCell>
-                    <TableCell className="text-right font-mono font-bold text-xs">
-                      {row.achievementRate}%
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant={badgeVariant} className="text-[10px] font-semibold">
-                        {status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right pr-4">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onDateClick?.(row.date)}
-                        className="h-7 px-2 text-xs font-semibold text-sky-600 hover:text-sky-700 hover:bg-sky-50 dark:text-sky-400 dark:hover:bg-sky-950/50"
+        <div className="overflow-x-auto max-h-96 overflow-y-auto">
+          <table className="w-full text-xs text-left">
+            <thead className="bg-slate-950 text-slate-400 font-semibold uppercase text-[11px] sticky top-0 border-b border-slate-800">
+              <tr>
+                <th className="py-2.5 px-4">Unit</th>
+                <th className="py-2.5 px-4">Line</th>
+                <th className="py-2.5 px-4 text-center">Manpower</th>
+                <th className="py-2.5 px-4 text-right">Plan PCS</th>
+                <th className="py-2.5 px-4 text-right">SAH</th>
+                <th className="py-2.5 px-4 text-right">Machine HR</th>
+                <th className="py-2.5 px-4 text-right">Working HR</th>
+                <th className="py-2.5 px-4 text-right">Efficiency %</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60">
+              {linesOnDate.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-slate-500">
+                    No production planned on this date {currentDay?.isWeeklyOff && "(Weekly Off Day - Friday)"}
+                  </td>
+                </tr>
+              ) : (
+                linesOnDate.map((l, i) => (
+                  <tr key={i} className="hover:bg-slate-800/50 transition">
+                    <td className="py-2.5 px-4 font-medium text-slate-300">{l.unitLabel}</td>
+                    <td className="py-2.5 px-4 font-bold text-white">{l.line}</td>
+                    <td className="py-2.5 px-4 text-center font-mono text-slate-400">{l.manpower}</td>
+                    <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-100">
+                      {l.metric.pcs.toLocaleString()}
+                    </td>
+                    <td className="py-2.5 px-4 text-right font-mono text-indigo-400 font-semibold">
+                      {l.metric.sah.toFixed(2)}
+                    </td>
+                    <td className="py-2.5 px-4 text-right font-mono text-amber-400">
+                      {l.metric.machineHour.toFixed(1)}
+                    </td>
+                    <td className="py-2.5 px-4 text-right font-mono text-slate-300">
+                      {l.metric.workingHour.toFixed(1)}
+                    </td>
+                    <td className="py-2.5 px-4 text-right font-mono font-bold">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-xs ${
+                          l.metric.efficiency >= 70
+                            ? "bg-emerald-500/20 text-emerald-400"
+                            : l.metric.efficiency >= 60
+                            ? "bg-amber-500/20 text-amber-400"
+                            : "bg-rose-500/20 text-rose-400"
+                        }`}
                       >
-                        <Eye className="h-3.5 w-3.5 mr-1" />
-                        <span>View Lines</span>
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-            <TableFooter>
-              <TableRow className="bg-slate-100/80 font-bold dark:bg-slate-850">
-                <TableCell>Total Month Output</TableCell>
-                <TableCell className="text-right font-mono">{totals.totalTarget.toLocaleString()}</TableCell>
-                <TableCell className="text-right font-mono text-emerald-600 dark:text-emerald-400">{totals.totalActual.toLocaleString()}</TableCell>
-                <TableCell className="text-right font-mono text-rose-600">-{totals.totalGap.toLocaleString()}</TableCell>
-                <TableCell className="text-right font-mono">{totals.totalTargetSah.toLocaleString()}</TableCell>
-                <TableCell className="text-right font-mono">{totals.totalActualSah.toLocaleString()}</TableCell>
-                <TableCell className="text-right font-mono text-indigo-600 dark:text-indigo-400">{totals.avgEff}% (Avg)</TableCell>
-                <TableCell className="text-right font-mono">{totals.avgAch}%</TableCell>
-                <TableCell colSpan={2} className="text-center">Sign-off Month Total</TableCell>
-              </TableRow>
-            </TableFooter>
-          </Table>
+                        {l.metric.efficiency.toFixed(1)}%
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
